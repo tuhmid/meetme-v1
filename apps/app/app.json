@@ -6,9 +6,12 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.meetme.app"
     },
-    "android": {},
+    "android": {
+      "package": "com.meetme.app"
+    },
     "web": {
       "bundler": "metro"
     },
