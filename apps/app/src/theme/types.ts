@@ -1,3 +1,5 @@
+import type { TextStyle } from 'react-native';
+
 // The MeetMe theme contract.
 //
 // Every theme (polish, fintech, …) fills these EXACT slots — same keys, different
@@ -61,8 +63,8 @@ export interface ThemeRadius {
 
 export interface ThemeType {
   size: { xs: number; sm: number; base: number; md: number; lg: number; xl: number; xxl: number; display: number };
-  // RN fontWeight strings ('400' | '500' | '600' | '700' | '800').
-  weight: { regular: string; medium: string; semibold: string; bold: string };
+  // RN fontWeight values ('400' | '500' | '600' | '700' | '800', etc.).
+  weight: { regular: TextStyle['fontWeight']; medium: TextStyle['fontWeight']; semibold: TextStyle['fontWeight']; bold: TextStyle['fontWeight'] };
   // Line-height multipliers (multiply by size at the call site).
   lineHeight: { tight: number; normal: number; relaxed: number };
   // Optional custom font families (wired later once fonts are loaded); undefined = system.

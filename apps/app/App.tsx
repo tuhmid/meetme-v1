@@ -7,6 +7,8 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { api, type Action, type Deal, type Invite, type MeetupSpot, type Role, type Transfer, type UserProfile } from './src/api';
 import { supabase } from './src/supabase';
 import { registerForPush } from './src/push';
+import { ThemeProvider, useTheme, ThemeToggle } from './src/theme';
+import type { Theme } from './src/theme/types';
 
 // Two modes:
 //  • Real login — phone OTP (Supabase Auth). One identity per device; live updates
@@ -16,7 +18,6 @@ import { registerForPush } from './src/push';
 type Phase = 'login' | 'home' | 'deal';
 interface Session { userId: string; name: string; accessToken: string }
 interface DemoUsers { buyer: { id: string; name: string }; seller: { id: string; name: string } }
-const GREEN = '#2f6f5e';
 // --- input masks / validation (US phone + USD amount) ---
 const phoneDigits = (v: string): string => v.replace(/\D/g, '').replace(/^1/, '').slice(0, 10);
 const formatPhone = (v: string): string => {
@@ -32,7 +33,8 @@ const formatMoney = (cents: number): string => `$${(cents / 100).toFixed(2)}`; /
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) UIManager.setLayoutAnimationEnabledExperimental(true);
 const gentle = () => LayoutAnimation.configureNext(LayoutAnimation.create(220, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity));
 
-export default function App() {
+function AppRoot() {
+  const theme = useTheme();
   const [phase, setPhase] = useState<Phase>('login');
   const [session, setSession] = useState<Session | null>(null); // real auth
   const [demo, setDemo] = useState<DemoUsers | null>(null); // demo relay
@@ -420,78 +422,80 @@ export default function App() {
   // during logout where the auth listener clears `session` before `phase` flips.
   if (phase === 'login' || (!session && !demo))
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f7f9' }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-        <Text style={{ fontSize: 30, fontWeight: '800', color: GREEN }}>MeetMe</Text>
-        <Text style={{ color: '#555', marginBottom: 22 }}>Sign in with your phone</Text>
-        <TextInput value={name} onChangeText={setName} placeholder="Your name" style={input} />
-        <TextInput value={phone} onChangeText={(t) => setPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" maxLength={12} style={input} />
+        <Text style={{ fontSize: 30, fontWeight: '800', color: theme.colors.primary }}>MeetMe</Text>
+        <View style={{ marginTop: 10, marginBottom: 6 }}><ThemeToggle /></View>
+        <Text style={{ color: theme.colors.textDim, marginBottom: 22 }}>Sign in with your phone</Text>
+        <TextInput value={name} onChangeText={setName} placeholder="Your name" style={inputStyle(theme)} />
+        <TextInput value={phone} onChangeText={(t) => setPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" maxLength={12} style={inputStyle(theme)} />
         {!otpSent ? (
           <Btn label="Send code" onPress={sendCode} />
         ) : (
           <>
-            <TextInput value={otp} onChangeText={setOtp} placeholder="6-digit code (local: 123456)" keyboardType="number-pad" style={input} />
+            <TextInput value={otp} onChangeText={setOtp} placeholder="6-digit code (local: 123456)" keyboardType="number-pad" style={inputStyle(theme)} />
             <Btn label="Verify & continue" onPress={verifyCode} />
-            <Pressable onPress={() => setOtpSent(false)}><Text style={{ color: GREEN, textAlign: 'center', marginTop: 4 }}>Use a different number</Text></Pressable>
+            <Pressable onPress={() => setOtpSent(false)}><Text style={{ color: theme.colors.primary, textAlign: 'center', marginTop: 4 }}>Use a different number</Text></Pressable>
           </>
         )}
-        <Text style={{ color: '#93a1ab', textAlign: 'center', marginVertical: 18 }}>— or —</Text>
-        <Pressable onPress={startDemo} style={{ borderColor: GREEN, borderWidth: 1.5, padding: 14, borderRadius: 12 }}>
-          <Text style={{ color: GREEN, textAlign: 'center', fontWeight: '700' }}>Demo mode (Maya & Sam on one device)</Text>
+        <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginVertical: 18 }}>— or —</Text>
+        <Pressable onPress={startDemo} style={{ borderColor: theme.colors.primary, borderWidth: 1.5, padding: 14, borderRadius: 12 }}>
+          <Text style={{ color: theme.colors.primary, textAlign: 'center', fontWeight: '700' }}>Demo mode (Maya & Sam on one device)</Text>
         </Pressable>
         {busy && <ActivityIndicator style={{ marginTop: 16 }} />}
-        {!!err && <Text style={{ color: '#b3382a', marginTop: 12 }}>{err}</Text>}
+        {!!err && <Text style={{ color: theme.colors.danger, marginTop: 12 }}>{err}</Text>}
       </ScrollView>
       </KeyboardAvoidingView>
       </SafeAreaView>
     );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f7f9' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 6, paddingBottom: 34 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {session ? (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#14181b', borderRadius: 10, padding: 10, marginBottom: 12 }}>
-              <Text style={{ color: '#fff' }}>Signed in as <Text style={{ fontWeight: '800' }}>{session.name}</Text></Text>
-              <Pressable onPress={logout}><Text style={{ color: '#f0a', fontSize: 12 }}>Log out</Text></Pressable>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.colors.text, borderRadius: 10, padding: 10, marginBottom: 12 }}>
+              <Text style={{ color: theme.colors.surface }}>Signed in as <Text style={{ fontWeight: '800' }}>{session.name}</Text></Text>
+              <Pressable onPress={logout}><Text style={{ color: theme.colors.danger, fontSize: 12 }}>Log out</Text></Pressable>
             </View>
           ) : (
             <RoleBar viewAs={viewAs} users={demo!} onToggle={() => setViewAs((r) => (r === 'buyer' ? 'seller' : 'buyer'))} />
           )}
 
+          <View style={{ marginBottom: 12, alignItems: 'flex-start' }}><ThemeToggle /></View>
           <Animated.View style={{ opacity: screenFade }}>
           {!!banner && (
-            <Pressable onPress={() => setBanner('')} style={{ backgroundColor: '#e7f3ee', borderColor: GREEN, borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 10 }}>
-              <Text style={{ color: GREEN, fontWeight: '600' }}>{banner}</Text>
+            <Pressable onPress={() => setBanner('')} style={{ backgroundColor: theme.colors.successSoft, borderColor: theme.colors.primary, borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 10 }}>
+              <Text style={{ color: theme.colors.primary, fontWeight: '600' }}>{banner}</Text>
             </Pressable>
           )}
-          {!!err && <Text style={{ color: '#b3382a', marginVertical: 8 }}>{err}</Text>}
+          {!!err && <Text style={{ color: theme.colors.danger, marginVertical: 8 }}>{err}</Text>}
 
           {phase === 'home' && (
             <>
           {session && invites.length > 0 && (
             <>
-              <Text style={sectionLabel}>Invites for you</Text>
+              <Text style={sectionLabelStyle(theme)}>Invites for you</Text>
               {invites.map((iv) => (
-                <View key={iv.token} style={card}>
+                <View key={iv.token} style={cardStyle(theme)}>
                   <Text style={{ fontWeight: '600' }}>{iv.inviterName} invited you</Text>
-                  <Text style={{ color: '#6b7882' }}>{iv.itemDescription} · {formatMoney(iv.amountCents)}</Text>
-                  <Text style={{ color: GREEN, marginBottom: 8, fontSize: 13 }}>You'll be the {iv.yourRole}</Text>
+                  <Text style={{ color: theme.colors.textDim }}>{iv.itemDescription} · {formatMoney(iv.amountCents)}</Text>
+                  <Text style={{ color: theme.colors.primary, marginBottom: 8, fontSize: 13 }}>You'll be the {iv.yourRole}</Text>
                   <Btn label="Accept" onPress={() => acceptInvite(iv.token)} />
-                  <Pressable onPress={() => declineInvite(iv.token)}><Text style={{ color: '#b3382a', textAlign: 'center' }}>Decline</Text></Pressable>
+                  <Pressable onPress={() => declineInvite(iv.token)}><Text style={{ color: theme.colors.danger, textAlign: 'center' }}>Decline</Text></Pressable>
                 </View>
               ))}
             </>
           )}
 
-          <Text style={sectionLabel}>{session ? 'Invite someone to a deal' : 'New deal'}</Text>
-          <TextInput value={item} onChangeText={setItem} placeholder="Item (e.g. iPhone 12, 128GB)" style={input} />
-          <TextInput value={amountCents ? formatMoney(amountCents) : ''} onChangeText={(t) => setAmountCents(centsFromInput(t))} placeholder="$0.00" keyboardType="number-pad" style={input} />
+          <Text style={sectionLabelStyle(theme)}>{session ? 'Invite someone to a deal' : 'New deal'}</Text>
+          <TextInput value={item} onChangeText={setItem} placeholder="Item (e.g. iPhone 12, 128GB)" style={inputStyle(theme)} />
+          <TextInput value={amountCents ? formatMoney(amountCents) : ''} onChangeText={(t) => setAmountCents(centsFromInput(t))} placeholder="$0.00" keyboardType="number-pad" style={inputStyle(theme)} />
           {session ? (
             <>
-              <TextInput value={cpPhone} onChangeText={(t) => setCpPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" maxLength={12} style={input} />
+              <TextInput value={cpPhone} onChangeText={(t) => setCpPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" maxLength={12} style={inputStyle(theme)} />
               <View style={{ flexDirection: 'row', marginBottom: 8 }}>
                 <RolePick label="I'm buying" active={inviteRole === 'buyer'} onPress={() => setInviteRole('buyer')} />
                 <View style={{ width: 8 }} />
@@ -503,12 +507,12 @@ export default function App() {
             <Btn label={dealValid() ? `Create deal (${formatMoney(amountCents)})` : 'Create deal'} disabled={!dealValid()} onPress={newDeal} />
           )}
 
-          <Text style={sectionLabel}>Your deals</Text>
+          <Text style={sectionLabelStyle(theme)}>Your deals</Text>
           {deals.map((d) => {
             const row = (
-              <Pressable onPress={() => openDeal(d.id)} style={card}>
+              <Pressable onPress={() => openDeal(d.id)} style={cardStyle(theme)}>
                 <Text style={{ fontWeight: '600' }}>{d.itemDescription}</Text>
-                <Text style={{ color: '#6b7882' }}>{formatMoney(d.amountCents)} · {d.state}</Text>
+                <Text style={{ color: theme.colors.textDim }}>{formatMoney(d.amountCents)} · {d.state}</Text>
               </Pressable>
             );
             if (d.state !== 'DRAFT') return <View key={d.id}>{row}</View>;
@@ -516,8 +520,8 @@ export default function App() {
               <Swipeable
                 key={d.id}
                 renderRightActions={() => (
-                  <Pressable onPress={() => deleteDraft(d.id)} style={{ backgroundColor: '#b3382a', justifyContent: 'center', paddingHorizontal: 22, borderRadius: 12, marginBottom: 10 }}>
-                    <Text style={{ color: '#fff', fontWeight: '700' }}>Delete</Text>
+                  <Pressable onPress={() => deleteDraft(d.id)} style={{ backgroundColor: theme.colors.danger, justifyContent: 'center', paddingHorizontal: 22, borderRadius: 12, marginBottom: 10 }}>
+                    <Text style={{ color: theme.colors.surface, fontWeight: '700' }}>Delete</Text>
                   </Pressable>
                 )}
               >
@@ -525,16 +529,16 @@ export default function App() {
               </Swipeable>
             );
           })}
-          {deals.length === 0 && <Text style={{ color: '#93a1ab' }}>No deals yet.</Text>}
-          {session && <Text style={{ color: '#93a1ab', fontSize: 12, marginTop: 10 }}>Tip: swipe a draft deal left to delete it.</Text>}
+          {deals.length === 0 && <Text style={{ color: theme.colors.textMuted }}>No deals yet.</Text>}
+          {session && <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 10 }}>Tip: swipe a draft deal left to delete it.</Text>}
             </>
           )}
 
           {phase === 'deal' && deal && (
             <>
-          <Pressable onPress={() => setPhase('home')}><Text style={{ color: GREEN, marginBottom: 8 }}>← My deals</Text></Pressable>
+          <Pressable onPress={() => setPhase('home')}><Text style={{ color: theme.colors.primary, marginBottom: 8 }}>← My deals</Text></Pressable>
           <Text style={{ fontSize: 22, fontWeight: '800' }}>{deal.itemDescription}</Text>
-          <Text style={{ color: '#6b7882', marginBottom: 6 }}>{formatMoney(deal.amountCents)} · {deal.state}</Text>
+          <Text style={{ color: theme.colors.textDim, marginBottom: 6 }}>{formatMoney(deal.amountCents)} · {deal.state}</Text>
 
           {(() => {
             const other: Role = myRole(deal) === 'buyer' ? 'seller' : 'buyer';
@@ -543,9 +547,9 @@ export default function App() {
             const oDeals = other === 'buyer' ? rep.buyerDeals : rep.sellerDeals;
             return (
               <Pressable onPress={openProfile} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }} hitSlop={8}>
-                <Ionicons name="star" size={14} color="#f4b400" />
-                <Text style={{ color: '#6b7882', marginLeft: 5 }}>{oName} · trust {oTrust ?? '—'}/100 · {oDeals} deal{oDeals === 1 ? '' : 's'}</Text>
-                <Ionicons name="chevron-forward" size={14} color="#93a1ab" style={{ marginLeft: 2 }} />
+                <Ionicons name="star" size={14} color={theme.colors.star} />
+                <Text style={{ color: theme.colors.textDim, marginLeft: 5 }}>{oName} · trust {oTrust ?? '—'}/100 · {oDeals} deal{oDeals === 1 ? '' : 's'}</Text>
+                <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} style={{ marginLeft: 2 }} />
               </Pressable>
             );
           })()}
@@ -556,13 +560,13 @@ export default function App() {
             const canSet = ['DRAFT', 'AGREED', 'FUNDED', 'ARMED'].includes(deal.state);
             if (deal.meetupName) {
               return (
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: deal.meetupCustom ? '#f0c9c3' : '#cfe6dc', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-                  <Ionicons name="location" size={20} color={deal.meetupCustom ? '#b3382a' : GREEN} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: deal.meetupCustom ? theme.colors.warning : theme.colors.primarySoft, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <Ionicons name="location" size={20} color={deal.meetupCustom ? theme.colors.danger : theme.colors.primary} />
                   <View style={{ flex: 1, marginLeft: 8 }}>
                     <Text style={{ fontWeight: '700' }} numberOfLines={1}>{deal.meetupName}</Text>
-                    <Text style={{ color: deal.meetupCustom ? '#b3382a' : GREEN, fontSize: 12 }}>{deal.meetupCustom ? 'Custom spot — not verified' : 'Safe public spot'}</Text>
+                    <Text style={{ color: deal.meetupCustom ? theme.colors.danger : theme.colors.primary, fontSize: 12 }}>{deal.meetupCustom ? 'Custom spot — not verified' : 'Safe public spot'}</Text>
                   </View>
-                  {canSet && <Pressable onPress={openMeetup} hitSlop={8}><Text style={{ color: GREEN, fontWeight: '600' }}>Change</Text></Pressable>}
+                  {canSet && <Pressable onPress={openMeetup} hitSlop={8}><Text style={{ color: theme.colors.primary, fontWeight: '600' }}>Change</Text></Pressable>}
                 </View>
               );
             }
@@ -575,15 +579,15 @@ export default function App() {
 
           {(deal.state === 'EN_ROUTE' || deal.state === 'AT_MEETUP') && (
             mapUrl ? (
-              <View style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 12, backgroundColor: '#eef5f1' }}>
+              <View style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 12, backgroundColor: theme.colors.successSoft }}>
                 <Image source={{ uri: mapUrl }} style={{ width: '100%', height: 200 }} resizeMode="cover" />
                 <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: GREEN, marginRight: 5 }} />
-                  <Text style={{ color: GREEN, fontWeight: '700', fontSize: 12 }}>LIVE</Text>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primary, marginRight: 5 }} />
+                  <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 12 }}>LIVE</Text>
                 </View>
                 <View style={{ padding: 10 }}>
-                  <Text style={{ color: '#444' }}>{names.buyer.split(' ')[0]}: <Text style={{ fontWeight: '700' }}>{presenceLabel(deal.buyerArrived, deal.buyerHeadedOut)}</Text>  ·  {names.seller.split(' ')[0]}: <Text style={{ fontWeight: '700' }}>{presenceLabel(deal.sellerArrived, deal.sellerHeadedOut)}</Text></Text>
-                  {geo?.distanceM != null && <Text style={{ color: '#6b7882', marginTop: 2 }}>{geo.distanceM} m apart</Text>}
+                  <Text style={{ color: theme.colors.text }}>{names.buyer.split(' ')[0]}: <Text style={{ fontWeight: '700' }}>{presenceLabel(deal.buyerArrived, deal.buyerHeadedOut)}</Text>  ·  {names.seller.split(' ')[0]}: <Text style={{ fontWeight: '700' }}>{presenceLabel(deal.sellerArrived, deal.sellerHeadedOut)}</Text></Text>
+                  {geo?.distanceM != null && <Text style={{ color: theme.colors.textDim, marginTop: 2 }}>{geo.distanceM} m apart</Text>}
                 </View>
               </View>
             ) : (
@@ -594,30 +598,30 @@ export default function App() {
             <>
               <Btn label="Share my location" onPress={shareLocation} />
               {geo && !geo.coLocated && geo.distanceM != null && (
-                <Text style={{ color: '#6b7882', marginBottom: 4 }}>{geo.distanceM} m apart — keep going.</Text>
+                <Text style={{ color: theme.colors.textDim, marginBottom: 4 }}>{geo.distanceM} m apart — keep going.</Text>
               )}
             </>
           )}
 
           {deal.state === 'AT_MEETUP' && myRole(deal) === 'buyer' && deal.codeRevealed && (
-            <Text style={{ fontSize: 32, fontWeight: '800', letterSpacing: 6, color: GREEN, marginVertical: 12 }}>{code || '••••'}</Text>
+            <Text style={{ fontSize: 32, fontWeight: '800', letterSpacing: 6, color: theme.colors.primary, marginVertical: 12 }}>{code || '••••'}</Text>
           )}
           {deal.state === 'AT_MEETUP' && myRole(deal) === 'seller' && (
             <View style={{ marginVertical: 8 }}>
-              <TextInput value={code} onChangeText={setCode} placeholder="release code" keyboardType="number-pad" style={input} />
+              <TextInput value={code} onChangeText={setCode} placeholder="release code" keyboardType="number-pad" style={inputStyle(theme)} />
               <Btn label="Enter code" onPress={() => act({ type: 'ENTER_CODE', code })} />
             </View>
           )}
 
           {!nextActions(deal, myRole(deal)).length && deal.state !== 'AT_MEETUP' && deal.state !== 'EN_ROUTE' && (
-            <Text style={{ color: '#6b7882', marginVertical: 8 }}>
+            <Text style={{ color: theme.colors.textDim, marginVertical: 8 }}>
               {session ? `Waiting on the other party…` : `Waiting on ${otherName()} — tap "View as ${otherName().split(' ')[0]}" above.`}
             </Text>
           )}
 
           {['DRAFT', 'AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE'].includes(deal.state) && (
             <Pressable onPress={cancelDeal} style={{ marginTop: 10 }}>
-              <Text style={{ color: '#b3382a', textAlign: 'center' }}>
+              <Text style={{ color: theme.colors.danger, textAlign: 'center' }}>
                 {deal.state === 'EN_ROUTE' ? 'Back out (forfeits your commitment)' : 'Cancel this deal (full refund)'}
               </Text>
             </Pressable>
@@ -625,39 +629,39 @@ export default function App() {
 
           {['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(deal.state) && (
             <Pressable onPress={openDispute} style={{ marginTop: 10 }}>
-              <Text style={{ color: '#b3382a', textAlign: 'center' }}>Something wrong? Report a problem</Text>
+              <Text style={{ color: theme.colors.danger, textAlign: 'center' }}>Something wrong? Report a problem</Text>
             </Pressable>
           )}
 
           {['AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
             <Pressable onPress={reportOrBlock} style={{ marginTop: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-              <Ionicons name="flag-outline" size={14} color="#93a1ab" />
-              <Text style={{ color: '#93a1ab', textAlign: 'center', marginLeft: 5 }}>Report or block {theirName()}</Text>
+              <Ionicons name="flag-outline" size={14} color={theme.colors.textMuted} />
+              <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginLeft: 5 }}>Report or block {theirName()}</Text>
             </Pressable>
           )}
 
           {['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(deal.state) && (
             <Pressable
               onPress={leaveSafely}
-              style={{ marginTop: 16, borderWidth: 1, borderColor: '#f0c9c4', backgroundColor: '#fdf3f2', borderRadius: 12, paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
+              style={{ marginTop: 16, borderWidth: 1, borderColor: theme.colors.warning, backgroundColor: theme.colors.dangerSoft, borderRadius: 12, paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
             >
-              <Ionicons name="shield-outline" size={16} color="#b3382a" />
-              <Text style={{ color: '#b3382a', fontWeight: '700', marginLeft: 6 }}>Feel unsafe? Leave safely</Text>
+              <Ionicons name="shield-outline" size={16} color={theme.colors.danger} />
+              <Text style={{ color: theme.colors.danger, fontWeight: '700', marginLeft: 6 }}>Feel unsafe? Leave safely</Text>
             </Pressable>
           )}
 
           {deal.state === 'DISPUTED' && (
-            <View style={{ backgroundColor: '#fdecea', borderColor: '#b3382a', borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 12 }}>
-              <Text style={{ fontWeight: '800', color: '#b3382a', marginBottom: 4 }}>Dispute open — funds frozen</Text>
-              <Text style={{ color: '#7a2a22', marginBottom: 10 }}>Both sides explain what happened; a MeetMe specialist reviews and decides.</Text>
+            <View style={{ backgroundColor: theme.colors.dangerSoft, borderColor: theme.colors.danger, borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 12 }}>
+              <Text style={{ fontWeight: '800', color: theme.colors.danger, marginBottom: 4 }}>Dispute open — funds frozen</Text>
+              <Text style={{ color: theme.colors.danger, marginBottom: 10 }}>Both sides explain what happened; a MeetMe specialist reviews and decides.</Text>
               {deal.disputePositions.map((p, i) => (
-                <Text key={i} style={{ color: '#444', marginBottom: 6 }}><Text style={{ fontWeight: '700' }}>{p.actor}:</Text> {p.text}</Text>
+                <Text key={i} style={{ color: theme.colors.text, marginBottom: 6 }}><Text style={{ fontWeight: '700' }}>{p.actor}:</Text> {p.text}</Text>
               ))}
-              <TextInput value={statement} onChangeText={setStatement} placeholder="Your account of what happened" multiline style={[input, { minHeight: 60 }]} />
+              <TextInput value={statement} onChangeText={setStatement} placeholder="Your account of what happened" multiline style={[inputStyle(theme), { minHeight: 60 }]} />
               <Btn label="Submit statement" disabled={!statement.trim()} onPress={submitStatement} />
 
-              <Text style={{ color: '#7a2a22', fontWeight: '700', marginTop: 6 }}>Agree on a resolution</Text>
-              <Text style={{ color: '#7a2a22', fontSize: 12, marginBottom: 6 }}>
+              <Text style={{ color: theme.colors.danger, fontWeight: '700', marginTop: 6 }}>Agree on a resolution</Text>
+              <Text style={{ color: theme.colors.danger, fontSize: 12, marginBottom: 6 }}>
                 You: {deal.disputeProposals[myRole(deal)] ?? '—'} · Them: {deal.disputeProposals[myRole(deal) === 'buyer' ? 'seller' : 'buyer'] ?? '—'} — if you both pick the same, it resolves instantly.
               </Text>
               <View style={{ flexDirection: 'row', marginBottom: 10 }}>
@@ -668,7 +672,7 @@ export default function App() {
                 <RolePick label="Split" active={deal.disputeProposals[myRole(deal)] === 'split'} onPress={() => propose('split')} />
               </View>
 
-              <Text style={{ color: '#93a1ab', fontSize: 12, marginTop: 4, marginBottom: 6 }}>Or a specialist decides (demo — admin/support console):</Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 4, marginBottom: 6 }}>Or a specialist decides (demo — admin/support console):</Text>
               <View style={{ flexDirection: 'row' }}>
                 <RolePick label="Release" active={false} onPress={() => resolveDispute('release')} />
                 <View style={{ width: 6 }} />
@@ -680,16 +684,16 @@ export default function App() {
           )}
 
           {deal.state === 'DISPUTE_RESOLVED' && !!deal.resolutionNote && (
-            <View style={{ backgroundColor: '#e7f3ee', borderRadius: 12, padding: 14, marginTop: 12 }}>
-              <Text style={{ fontWeight: '700', color: GREEN }}>Dispute resolved</Text>
-              <Text style={{ color: '#444' }}>{deal.resolutionNote}</Text>
+            <View style={{ backgroundColor: theme.colors.successSoft, borderRadius: 12, padding: 14, marginTop: 12 }}>
+              <Text style={{ fontWeight: '700', color: theme.colors.primary }}>Dispute resolved</Text>
+              <Text style={{ color: theme.colors.text }}>{deal.resolutionNote}</Text>
             </View>
           )}
 
           {(deal.state === 'RELEASED' || deal.state === 'DISPUTE_RESOLVED') && (
-            <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginTop: 12, borderWidth: 1, borderColor: '#e3e8ec' }}>
+            <View style={{ backgroundColor: theme.colors.surface, borderRadius: 12, padding: 14, marginTop: 12, borderWidth: 1, borderColor: theme.colors.border }}>
               {deal.ratings[myRole(deal)] !== undefined ? (
-                <Text style={{ color: '#6b7882' }}>You rated {deal.ratings[myRole(deal)]}★ — thanks for the feedback!</Text>
+                <Text style={{ color: theme.colors.textDim }}>You rated {deal.ratings[myRole(deal)]}★ — thanks for the feedback!</Text>
               ) : (
                 <>
                   <Text style={{ fontWeight: '700', marginBottom: 8 }}>Rate your experience</Text>
@@ -701,33 +705,33 @@ export default function App() {
 
           {['AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
             <View style={{ marginTop: 18 }}>
-              <Text style={{ marginBottom: 6, color: '#6b7882', fontWeight: '600' }}>Chat</Text>
-              <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e8ec', borderRadius: 12, padding: 10 }}>
+              <Text style={{ marginBottom: 6, color: theme.colors.textDim, fontWeight: '600' }}>Chat</Text>
+              <View style={{ backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, padding: 10 }}>
                 {messages.length === 0 ? (
-                  <Text style={{ color: '#93a1ab', padding: 6 }}>No messages yet — coordinate your meetup here.</Text>
+                  <Text style={{ color: theme.colors.textMuted, padding: 6 }}>No messages yet — coordinate your meetup here.</Text>
                 ) : (
                   messages.map((m, i) => {
                     const mine = m.senderId === myId();
                     return (
-                      <View key={i} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', backgroundColor: mine ? GREEN : '#eef1f3', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 7, marginVertical: 3, maxWidth: '82%' }}>
-                        <Text style={{ color: mine ? '#fff' : '#14181b' }}>{m.body}</Text>
+                      <View key={i} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', backgroundColor: mine ? theme.colors.primary : theme.colors.surfaceAlt, borderRadius: theme.radius.md, paddingHorizontal: 12, paddingVertical: 7, marginVertical: 3, maxWidth: '82%' }}>
+                        <Text style={{ color: mine ? theme.colors.onPrimary : theme.colors.text }}>{m.body}</Text>
                       </View>
                     );
                   })
                 )}
               </View>
               <View style={{ flexDirection: 'row', marginTop: 8 }}>
-                <TextInput value={msgInput} onChangeText={setMsgInput} placeholder="Message…" style={[input, { flex: 1, marginBottom: 0 }]} onSubmitEditing={sendMessage} returnKeyType="send" />
-                <Pressable onPress={sendMessage} style={{ backgroundColor: GREEN, borderRadius: 10, paddingHorizontal: 16, justifyContent: 'center', marginLeft: 8 }} hitSlop={4}>
-                  <Ionicons name="send" size={18} color="#fff" />
+                <TextInput value={msgInput} onChangeText={setMsgInput} placeholder="Message…" style={[inputStyle(theme), { flex: 1, marginBottom: 0 }]} onSubmitEditing={sendMessage} returnKeyType="send" />
+                <Pressable onPress={sendMessage} style={{ backgroundColor: theme.colors.primary, borderRadius: 10, paddingHorizontal: 16, justifyContent: 'center', marginLeft: 8 }} hitSlop={4}>
+                  <Ionicons name="send" size={18} color={theme.colors.onPrimary} />
                 </Pressable>
               </View>
             </View>
           )}
 
-          <Text style={{ marginTop: 18, marginBottom: 6, color: '#6b7882', fontWeight: '600' }}>Money</Text>
+          <Text style={{ marginTop: 18, marginBottom: 6, color: theme.colors.textDim, fontWeight: '600' }}>Money</Text>
           {transfers.map((t, i) => (
-            <Text key={i} style={{ color: '#444' }}>{t.direction} · {t.status} · ${(t.amountCents / 100).toFixed(2)}</Text>
+            <Text key={i} style={{ color: theme.colors.text }}>{t.direction} · {t.status} · ${(t.amountCents / 100).toFixed(2)}</Text>
           ))}
           {busy && <ActivityIndicator style={{ marginTop: 12 }} />}
             </>
@@ -747,35 +751,35 @@ export default function App() {
       />
 
       <Modal visible={meetupOpen} animationType="slide" transparent onRequestClose={() => setMeetupOpen(false)}>
-        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' }}>
-          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 30, maxHeight: '88%' }}>
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.colors.overlay }}>
+          <View style={{ backgroundColor: theme.colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 30, maxHeight: '88%' }}>
             <ScrollView keyboardShouldPersistTaps="handled">
               <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 4 }}>Find a fair meeting spot</Text>
-              <Text style={{ color: '#6b7882', marginBottom: 14 }}>Safe public spots roughly halfway — balanced by drive time for both of you. Enter where you're coming from (this is only used to find the midpoint).</Text>
-              <TextInput value={comingFrom} onChangeText={setComingFrom} placeholder="Your starting area or address" style={input} />
+              <Text style={{ color: theme.colors.textDim, marginBottom: 14 }}>Safe public spots roughly halfway — balanced by drive time for both of you. Enter where you're coming from (this is only used to find the midpoint).</Text>
+              <TextInput value={comingFrom} onChangeText={setComingFrom} placeholder="Your starting area or address" style={inputStyle(theme)} />
               <Btn label="Find spots from this address" onPress={shareFromAddress} />
-              <Pressable onPress={shareFromCurrentLocation} style={{ marginBottom: 8 }}><Text style={{ color: GREEN, textAlign: 'center', fontWeight: '600' }}>Or use my current location</Text></Pressable>
-              {!!meetupMsg && <Text style={{ color: '#6b7882', marginBottom: 10 }}>{meetupMsg}</Text>}
+              <Pressable onPress={shareFromCurrentLocation} style={{ marginBottom: 8 }}><Text style={{ color: theme.colors.primary, textAlign: 'center', fontWeight: '600' }}>Or use my current location</Text></Pressable>
+              {!!meetupMsg && <Text style={{ color: theme.colors.textDim, marginBottom: 10 }}>{meetupMsg}</Text>}
               {deal && suggestions.map((s, i) => {
                 const mine = myRole(deal) === 'buyer' ? s.minutesBuyer : s.minutesSeller;
                 const theirs = myRole(deal) === 'buyer' ? s.minutesSeller : s.minutesBuyer;
                 return (
-                  <Pressable key={i} onPress={() => chooseMeetup(s)} style={[card, { flexDirection: 'row', alignItems: 'center' }]}>
-                    <Ionicons name={s.tier === 'verified' ? 'shield-checkmark' : 'business'} size={20} color={s.tier === 'verified' ? GREEN : '#6b7882'} />
+                  <Pressable key={i} onPress={() => chooseMeetup(s)} style={[cardStyle(theme), { flexDirection: 'row', alignItems: 'center' }]}>
+                    <Ionicons name={s.tier === 'verified' ? 'shield-checkmark' : 'business'} size={20} color={s.tier === 'verified' ? theme.colors.primary : theme.colors.textDim} />
                     <View style={{ flex: 1, marginLeft: 10 }}>
                       <Text style={{ fontWeight: '600' }} numberOfLines={1}>{s.name}</Text>
-                      <Text style={{ color: '#6b7882', fontSize: 12 }}>{s.tier === 'verified' ? 'Verified · ' : s.category + ' · '}{mine != null ? `you ${mine}m` : '—'} · {theirs != null ? `them ${theirs}m` : '—'}</Text>
+                      <Text style={{ color: theme.colors.textDim, fontSize: 12 }}>{s.tier === 'verified' ? 'Verified · ' : s.category + ' · '}{mine != null ? `you ${mine}m` : '—'} · {theirs != null ? `them ${theirs}m` : '—'}</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#b9c6c0" />
+                    <Ionicons name="chevron-forward" size={18} color={theme.colors.primarySoft} />
                   </Pressable>
                 );
               })}
-              <View style={{ height: 1, backgroundColor: '#eef3f0', marginVertical: 14 }} />
+              <View style={{ height: 1, backgroundColor: theme.colors.successSoft, marginVertical: 14 }} />
               <Text style={{ fontWeight: '700', marginBottom: 4 }}>Custom spot</Text>
-              <Text style={{ color: '#6b7882', fontSize: 12, marginBottom: 8 }}>Pick your own place — but it won't be a verified safe location.</Text>
-              <TextInput value={customSpot} onChangeText={setCustomSpot} placeholder="Custom address" style={input} />
+              <Text style={{ color: theme.colors.textDim, fontSize: 12, marginBottom: 8 }}>Pick your own place — but it won't be a verified safe location.</Text>
+              <TextInput value={customSpot} onChangeText={setCustomSpot} placeholder="Custom address" style={inputStyle(theme)} />
               <Btn label="Use a custom spot" onPress={useCustomSpot} />
-              <Pressable onPress={() => setMeetupOpen(false)} style={{ marginTop: 4 }}><Text style={{ color: '#6b7882', textAlign: 'center' }}>Close</Text></Pressable>
+              <Pressable onPress={() => setMeetupOpen(false)} style={{ marginTop: 4 }}><Text style={{ color: theme.colors.textDim, textAlign: 'center' }}>Close</Text></Pressable>
             </ScrollView>
           </View>
         </View>
@@ -836,6 +840,7 @@ const FUNDED_STATES = ['FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING']
 
 // Trust reassurance line on the deal screen — tap for the "how it works" explainer.
 function TrustBanner({ amount, state, role, onPress }: { amount: number; state: string; role: Role; onPress: () => void }) {
+  const theme = useTheme();
   const funded = FUNDED_STATES.includes(state);
   const text = !funded
     ? 'Funds are held safely in escrow until handoff'
@@ -843,16 +848,17 @@ function TrustBanner({ amount, state, role, onPress }: { amount: number; state: 
       ? `Your ${formatMoney(amount)} is safe in escrow`
       : `The buyer's ${formatMoney(amount)} is secured in escrow`;
   return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#e7f3ee', borderRadius: 10, padding: 12, marginBottom: 12 }}>
-      <Ionicons name="shield-checkmark" size={20} color={GREEN} />
-      <Text style={{ color: GREEN, fontWeight: '600', marginLeft: 8, flex: 1 }}>{text}</Text>
-      <Text style={{ color: GREEN, fontSize: 12, marginRight: 2 }}>How it works</Text>
-      <Ionicons name="chevron-forward" size={16} color={GREEN} />
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.successSoft, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+      <Ionicons name="shield-checkmark" size={20} color={theme.colors.primary} />
+      <Text style={{ color: theme.colors.primary, fontWeight: '600', marginLeft: 8, flex: 1 }}>{text}</Text>
+      <Text style={{ color: theme.colors.primary, fontSize: 12, marginRight: 2 }}>How it works</Text>
+      <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
     </Pressable>
   );
 }
 
 function TrustModal({ visible, amount, onClose }: { visible: boolean; amount: number; onClose: () => void }) {
+  const theme = useTheme();
   const rows: Array<[keyof typeof Ionicons.glyphMap, string, string]> = [
     ['lock-closed', 'Held in escrow', `Your ${amount ? formatMoney(amount) : 'payment'} is held by MeetMe — never sent to the other person up front.`],
     ['cash-outline', 'Released only on handoff', 'The seller is paid only after you confirm you got the item, using a one-time release code.'],
@@ -861,16 +867,16 @@ function TrustModal({ visible, amount, onClose }: { visible: boolean; amount: nu
   ];
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' }}>
-        <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 40 }}>
-          <Text style={{ fontSize: 22, fontWeight: '800', color: '#14181b', marginBottom: 4 }}>How your money stays safe</Text>
-          <Text style={{ color: '#6b7882', marginBottom: 18 }}>MeetMe holds the payment in escrow, so neither side can be scammed.</Text>
+      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.colors.overlay }}>
+        <View style={{ backgroundColor: theme.colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 40 }}>
+          <Text style={{ fontSize: 22, fontWeight: '800', color: theme.colors.text, marginBottom: 4 }}>How your money stays safe</Text>
+          <Text style={{ color: theme.colors.textDim, marginBottom: 18 }}>MeetMe holds the payment in escrow, so neither side can be scammed.</Text>
           {rows.map(([icon, title, body]) => (
             <View key={title} style={{ flexDirection: 'row', marginBottom: 16 }}>
-              <Ionicons name={icon} size={22} color={GREEN} style={{ marginTop: 2 }} />
+              <Ionicons name={icon} size={22} color={theme.colors.primary} style={{ marginTop: 2 }} />
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={{ fontWeight: '700', color: '#14181b' }}>{title}</Text>
-                <Text style={{ color: '#6b7882' }}>{body}</Text>
+                <Text style={{ fontWeight: '700', color: theme.colors.text }}>{title}</Text>
+                <Text style={{ color: theme.colors.textDim }}>{body}</Text>
               </View>
             </View>
           ))}
@@ -891,30 +897,31 @@ const STATE_LABEL: Record<string, string> = {
 function ProfileModal({ visible, loading, profile, onClose, onReportBlock }: {
   visible: boolean; loading: boolean; profile: UserProfile | null; onClose: () => void; onReportBlock: () => void;
 }) {
+  const theme = useTheme();
   const trust = profile?.trustScore ?? 0;
-  const trustColor = trust >= 70 ? GREEN : trust >= 40 ? '#d68a00' : '#b3382a';
+  const trustColor = trust >= 70 ? theme.colors.primary : trust >= 40 ? theme.colors.warning : theme.colors.danger;
   const initial = (profile?.name ?? '?').trim().charAt(0).toUpperCase();
   const year = profile?.memberSince ? new Date(profile.memberSince).getFullYear() : null;
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' }}>
-        <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 34, maxHeight: '86%' }}>
+      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.colors.overlay }}>
+        <View style={{ backgroundColor: theme.colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 34, maxHeight: '86%' }}>
           {loading || !profile ? (
             <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-              <ActivityIndicator color={GREEN} />
-              <Text style={{ color: '#93a1ab', marginTop: 10 }}>Loading profile…</Text>
+              <ActivityIndicator color={theme.colors.primary} />
+              <Text style={{ color: theme.colors.textMuted, marginTop: 10 }}>Loading profile…</Text>
             </View>
           ) : (
             <ScrollView keyboardShouldPersistTaps="handled">
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                 <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: profile.avatarColor, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800' }}>{initial}</Text>
+                  <Text style={{ color: theme.colors.surface, fontSize: 22, fontWeight: '800' }}>{initial}</Text>
                 </View>
                 <View style={{ flex: 1, marginLeft: 14 }}>
-                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#14181b' }}>{profile.name}</Text>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.text }}>{profile.name}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                    <Ionicons name={profile.idVerified ? 'shield-checkmark' : 'call'} size={13} color={profile.idVerified ? GREEN : '#93a1ab'} />
-                    <Text style={{ color: profile.idVerified ? GREEN : '#93a1ab', fontSize: 12, marginLeft: 4 }}>
+                    <Ionicons name={profile.idVerified ? 'shield-checkmark' : 'call'} size={13} color={profile.idVerified ? theme.colors.primary : theme.colors.textMuted} />
+                    <Text style={{ color: profile.idVerified ? theme.colors.primary : theme.colors.textMuted, fontSize: 12, marginLeft: 4 }}>
                       {profile.idVerified ? 'ID verified' : 'Phone verified'}{year ? ` · Member since ${year}` : ''}
                     </Text>
                   </View>
@@ -922,40 +929,40 @@ function ProfileModal({ visible, loading, profile, onClose, onReportBlock }: {
               </View>
 
               {profile.blocked && (
-                <View style={{ backgroundColor: '#fdecea', borderRadius: 10, padding: 10, marginBottom: 14, flexDirection: 'row', alignItems: 'center' }}>
-                  <Ionicons name="ban" size={15} color="#b3382a" />
-                  <Text style={{ color: '#b3382a', marginLeft: 6, fontWeight: '600' }}>You've blocked this person.</Text>
+                <View style={{ backgroundColor: theme.colors.dangerSoft, borderRadius: 10, padding: 10, marginBottom: 14, flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="ban" size={15} color={theme.colors.danger} />
+                  <Text style={{ color: theme.colors.danger, marginLeft: 6, fontWeight: '600' }}>You've blocked this person.</Text>
                 </View>
               )}
 
               {/* trust score */}
-              <Text style={{ fontWeight: '700', color: '#14181b', marginBottom: 6 }}>Trust score</Text>
-              <View style={{ height: 10, borderRadius: 5, backgroundColor: '#eef2f4', overflow: 'hidden', marginBottom: 4 }}>
+              <Text style={{ fontWeight: '700', color: theme.colors.text, marginBottom: 6 }}>Trust score</Text>
+              <View style={{ height: 10, borderRadius: 5, backgroundColor: theme.colors.surfaceAlt, overflow: 'hidden', marginBottom: 4 }}>
                 <View style={{ width: `${Math.max(4, Math.min(100, trust))}%`, height: 10, backgroundColor: trustColor }} />
               </View>
-              <Text style={{ color: '#6b7882', fontSize: 12, marginBottom: 16 }}>
+              <Text style={{ color: theme.colors.textDim, fontSize: 12, marginBottom: 16 }}>
                 {trust}/100 · {profile.completedDeals} completed deal{profile.completedDeals === 1 ? '' : 's'} on MeetMe
               </Text>
 
               {/* shared history */}
-              <Text style={{ fontWeight: '700', color: '#14181b', marginBottom: 8 }}>Your history together</Text>
+              <Text style={{ fontWeight: '700', color: theme.colors.text, marginBottom: 8 }}>Your history together</Text>
               {profile.shared.length === 0 ? (
-                <Text style={{ color: '#93a1ab', marginBottom: 16 }}>This is your first deal with {profile.name.split(' ')[0]}.</Text>
+                <Text style={{ color: theme.colors.textMuted, marginBottom: 16 }}>This is your first deal with {profile.name.split(' ')[0]}.</Text>
               ) : (
                 profile.shared.map((d) => (
-                  <View key={d.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#eef2f4' }}>
+                  <View key={d.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: 1, borderTopColor: theme.colors.surfaceAlt }}>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: '#14181b' }} numberOfLines={1}>{d.itemDescription}</Text>
-                      <Text style={{ color: '#93a1ab', fontSize: 12 }}>You were {d.youWere} · {formatMoney(d.amountCents)}</Text>
+                      <Text style={{ color: theme.colors.text }} numberOfLines={1}>{d.itemDescription}</Text>
+                      <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>You were {d.youWere} · {formatMoney(d.amountCents)}</Text>
                     </View>
-                    <Text style={{ color: d.state === 'RELEASED' ? GREEN : '#6b7882', fontSize: 12, fontWeight: '600' }}>{STATE_LABEL[d.state] ?? d.state}</Text>
+                    <Text style={{ color: d.state === 'RELEASED' ? theme.colors.primary : theme.colors.textDim, fontSize: 12, fontWeight: '600' }}>{STATE_LABEL[d.state] ?? d.state}</Text>
                   </View>
                 ))
               )}
 
               <Pressable onPress={onReportBlock} style={{ marginTop: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="flag-outline" size={14} color="#b3382a" />
-                <Text style={{ color: '#b3382a', marginLeft: 6, fontWeight: '600' }}>Report or block</Text>
+                <Ionicons name="flag-outline" size={14} color={theme.colors.danger} />
+                <Text style={{ color: theme.colors.danger, marginLeft: 6, fontWeight: '600' }}>Report or block</Text>
               </Pressable>
               <View style={{ height: 12 }} />
               <Btn label="Close" onPress={onClose} />
@@ -970,79 +977,92 @@ function ProfileModal({ visible, loading, profile, onClose, onReportBlock }: {
 // Stylized live presence card (the map look): both avatars on a route line toward
 // the meetup pin, positioned by status. (Real map = react-native-maps later.)
 function PresenceMap({ deal, myRole, names, distanceM }: { deal: Deal; myRole: Role; names: { buyer: string; seller: string }; distanceM: number | null }) {
+  const theme = useTheme();
   const prog = (arrived: boolean, headedOut: boolean) => (arrived ? 0.82 : headedOut ? 0.48 : 0.08);
   const label = (mine: boolean, arrived: boolean, headedOut: boolean) =>
     mine ? (distanceM != null ? `${distanceM}m · you` : 'you') : arrived ? 'Arrived' : headedOut ? 'heading over' : 'not left';
   const Dot = ({ p, name, color, mine, arrived, headedOut }: { p: number; name: string; color: string; mine: boolean; arrived: boolean; headedOut: boolean }) => (
     <View style={{ position: 'absolute', top: 30, left: `${p * 100}%`, width: 46, marginLeft: -23, alignItems: 'center' }}>
-      <View style={{ position: 'absolute', top: -22, backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#e3e8ec' }}>
-        <Text style={{ fontSize: 11, color: '#444' }} numberOfLines={1}>{label(mine, arrived, headedOut)}</Text>
+      <View style={{ position: 'absolute', top: -22, backgroundColor: theme.colors.surface, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: theme.colors.border }}>
+        <Text style={{ fontSize: 11, color: theme.colors.text }} numberOfLines={1}>{label(mine, arrived, headedOut)}</Text>
       </View>
-      <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: color, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
-        <Text style={{ color: '#fff', fontWeight: '800' }}>{initials(name)}</Text>
+      <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: color, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: theme.colors.surface }}>
+        <Text style={{ color: theme.colors.surface, fontWeight: '800' }}>{initials(name)}</Text>
       </View>
     </View>
   );
   return (
-    <View style={{ backgroundColor: '#eef5f1', borderRadius: 16, padding: 16, marginBottom: 12 }}>
+    <View style={{ backgroundColor: theme.colors.successSoft, borderRadius: 16, padding: 16, marginBottom: 12 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Ionicons name="location" size={18} color={GREEN} />
-          <Text style={{ fontWeight: '700', color: '#14181b', marginLeft: 4 }}>Meetup</Text>
+          <Ionicons name="location" size={18} color={theme.colors.primary} />
+          <Text style={{ fontWeight: '700', color: theme.colors.text, marginLeft: 4 }}>Meetup</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: GREEN, marginRight: 5 }} />
-          <Text style={{ color: GREEN, fontWeight: '700', fontSize: 12 }}>LIVE</Text>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primary, marginRight: 5 }} />
+          <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 12 }}>LIVE</Text>
         </View>
       </View>
       <View style={{ height: 84 }}>
-        <View style={{ position: 'absolute', left: 6, right: 30, top: 52, borderBottomWidth: 2, borderColor: '#bcd4c9', borderStyle: 'dashed' }} />
-        <View style={{ position: 'absolute', right: 0, top: 40 }}><Ionicons name="location" size={26} color={GREEN} /></View>
-        <Dot p={prog(deal.buyerArrived, deal.buyerHeadedOut)} name={names.buyer} color={GREEN} mine={myRole === 'buyer'} arrived={deal.buyerArrived} headedOut={deal.buyerHeadedOut} />
-        <Dot p={prog(deal.sellerArrived, deal.sellerHeadedOut)} name={names.seller} color="#3b6fe0" mine={myRole === 'seller'} arrived={deal.sellerArrived} headedOut={deal.sellerHeadedOut} />
+        <View style={{ position: 'absolute', left: 6, right: 30, top: 52, borderBottomWidth: 2, borderColor: theme.colors.primarySoft, borderStyle: 'dashed' }} />
+        <View style={{ position: 'absolute', right: 0, top: 40 }}><Ionicons name="location" size={26} color={theme.colors.primary} /></View>
+        <Dot p={prog(deal.buyerArrived, deal.buyerHeadedOut)} name={names.buyer} color={theme.colors.buyer} mine={myRole === 'buyer'} arrived={deal.buyerArrived} headedOut={deal.buyerHeadedOut} />
+        <Dot p={prog(deal.sellerArrived, deal.sellerHeadedOut)} name={names.seller} color={theme.colors.seller} mine={myRole === 'seller'} arrived={deal.sellerArrived} headedOut={deal.sellerHeadedOut} />
       </View>
     </View>
   );
 }
 
 // ---- tiny UI bits ----
-const card = { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#e3e8ec' } as const;
-const sectionLabel = { marginTop: 18, marginBottom: 8, color: '#6b7882', fontWeight: '600' } as const;
-const input = { backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#d8dee3', borderRadius: 10, padding: 12, fontSize: 18, marginBottom: 10 } as const;
+const cardStyle = (theme: Theme) => ({ backgroundColor: theme.colors.surface, borderRadius: theme.radius.md, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: theme.colors.border } as const);
+const sectionLabelStyle = (theme: Theme) => ({ marginTop: 18, marginBottom: 8, color: theme.colors.textDim, fontWeight: '600' } as const);
+const inputStyle = (theme: Theme) => ({ backgroundColor: theme.colors.surface, borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: theme.spacing.md, fontSize: theme.type.size.md, marginBottom: theme.spacing.sm } as const);
 function Btn({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
+  const theme = useTheme();
   return (
-    <Pressable onPress={disabled ? undefined : onPress} style={{ backgroundColor: disabled ? '#a9c3ba' : GREEN, padding: 15, borderRadius: 12, marginBottom: 8 }}>
-      <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '700' }}>{label}</Text>
+    <Pressable onPress={disabled ? undefined : onPress} style={{ backgroundColor: disabled ? theme.colors.primarySoft : theme.colors.primary, padding: 15, borderRadius: theme.radius.md, marginBottom: 8 }}>
+      <Text style={{ color: theme.colors.onPrimary, textAlign: 'center', fontWeight: '700' }}>{label}</Text>
     </Pressable>
   );
 }
 function StarPicker({ onPick }: { onPick: (n: number) => void }) {
+  const theme = useTheme();
   return (
     <View style={{ flexDirection: 'row' }}>
       {[1, 2, 3, 4, 5].map((n) => (
         <Pressable key={n} onPress={() => onPick(n)} style={{ marginRight: 6 }} hitSlop={6}>
-          <Ionicons name="star-outline" size={34} color="#f4b400" />
+          <Ionicons name="star-outline" size={34} color={theme.colors.star} />
         </Pressable>
       ))}
     </View>
   );
 }
 function RolePick({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  const theme = useTheme();
   return (
-    <Pressable onPress={onPress} style={{ flex: 1, paddingVertical: 11, borderRadius: 10, borderWidth: 1.5, borderColor: active ? GREEN : '#d8dee3', backgroundColor: active ? '#e7f3ee' : '#fff' }}>
-      <Text style={{ textAlign: 'center', color: active ? GREEN : '#6b7882', fontWeight: '700' }}>{label}</Text>
+    <Pressable onPress={onPress} style={{ flex: 1, paddingVertical: 11, borderRadius: 10, borderWidth: 1.5, borderColor: active ? theme.colors.primary : theme.colors.border, backgroundColor: active ? theme.colors.successSoft : theme.colors.surface }}>
+      <Text style={{ textAlign: 'center', color: active ? theme.colors.primary : theme.colors.textDim, fontWeight: '700' }}>{label}</Text>
     </Pressable>
   );
 }
 function RoleBar({ viewAs, users, onToggle }: { viewAs: Role; users: DemoUsers; onToggle: () => void }) {
+  const theme = useTheme();
   const me = viewAs === 'buyer' ? users.buyer : users.seller;
   const other = viewAs === 'buyer' ? users.seller : users.buyer;
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#14181b', borderRadius: 10, padding: 10, marginBottom: 12 }}>
-      <Text style={{ color: '#fff' }}>Viewing as <Text style={{ fontWeight: '800' }}>{me.name} ({viewAs})</Text></Text>
-      <Pressable onPress={onToggle} style={{ backgroundColor: GREEN, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 }}>
-        <Text style={{ color: '#fff', fontSize: 12 }}>View as {other.name.split(' ')[0]} ⇄</Text>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.colors.text, borderRadius: 10, padding: 10, marginBottom: 12 }}>
+      <Text style={{ color: theme.colors.surface }}>Viewing as <Text style={{ fontWeight: '800' }}>{me.name} ({viewAs})</Text></Text>
+      <Pressable onPress={onToggle} style={{ backgroundColor: theme.colors.primary, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 }}>
+        <Text style={{ color: theme.colors.onPrimary, fontSize: 12 }}>View as {other.name.split(' ')[0]} ⇄</Text>
       </Pressable>
     </View>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppRoot />
+    </ThemeProvider>
   );
 }
