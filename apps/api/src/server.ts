@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
-import { midpoint, requiresKyc, type Action } from '@meetme/core';
+import { midpoint, requiresKyc, usd, MIN_DEAL_CENTS, type Action } from '@meetme/core';
 import {
   acceptInvite,
   createDealHandler,
@@ -148,12 +148,14 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const { counterpartyPhone, itemDescription, amountCents, role } = (req.body ?? {}) as any;
     if (!counterpartyPhone || !itemDescription) return reply.code(400).send({ error: 'counterpartyPhone and itemDescription required' });
     if (!Number.isInteger(amountCents) || amountCents <= 0) return reply.code(400).send({ error: 'amountCents must be a positive integer (cents)' });
+    if (amountCents < MIN_DEAL_CENTS) return reply.code(400).send({ error: `Deals start at ${usd(MIN_DEAL_CENTS)} — below that the fees outweigh the item.` });
     const inviterRole: 'buyer' | 'seller' = role === 'seller' ? 'seller' : 'buyer';
     const me = await deps.repo.getUser(uid);
     if (me && requiresKyc(me.identityTier === 'id_verified', amountCents)) {
       return reply.code(400).send({ error: 'Verify your ID to set up deals over $500.', code: 'kyc_required' });
     }
     const digits = String(counterpartyPhone).replace(/[^\d]/g, '');
+    if (me && me.phone.replace(/[^\d]/g, '').endsWith(digits)) return reply.code(400).send({ error: "That's your own number — invite the other person." });
     const invitee = (await deps.repo.getUserByPhone(digits)) ?? (await deps.repo.getUserByPhone(String(counterpartyPhone)));
     if (invitee && (await deps.repo.isBlocked(uid, invitee.id))) return reply.code(400).send({ error: "You can't invite this person.", code: 'blocked' });
     const token = deps.makeCtx().newId();
@@ -300,6 +302,9 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const rec = await deps.repo.getDeal(id);
     if (!rec) return reply.code(404).send({ error: 'not found' });
     if (rec.deal.buyerId !== uid && rec.deal.sellerId !== uid) return reply.code(403).send({ error: 'not a participant' });
+    // a block mutes the channel both ways (history stays readable via GET)
+    const other = rec.deal.buyerId === uid ? rec.deal.sellerId : rec.deal.buyerId;
+    if (await deps.repo.isBlocked(uid, other)) return reply.code(403).send({ error: 'Messaging is unavailable for this deal.', code: 'blocked' });
     await deps.repo.addMessage(id, uid, body.slice(0, 1000));
     // best-effort push to the other party
     const otherId = rec.deal.buyerId === uid ? rec.deal.sellerId : rec.deal.buyerId;

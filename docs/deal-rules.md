@@ -7,6 +7,7 @@ cents; every ledger transaction sums to zero (nothing created/destroyed).
 - **Price** — the item cost (buyer → escrow → seller on completion).
 - **Fee** — flat per side, tiered by price (≤$200 $2.50 · ≤$500 $4 · ≤$1000 $5 · >$1000 $10). Charged **only on completion**.
 - **Commitment** — refundable **$5/side** ($2.50 for deals ≤$50). Skin-in-the-game to guarantee you show up. Refunded on completion; **forfeited to the company** if you flake.
+- **Minimum deal: $5** — below that the flat fee + commitment dwarf the item and the loop stops making sense. (No max yet; the phone tier caps at $500 without ID verification. A licensed partner will impose a hard cap later.)
 
 ## Happy path
 DRAFT → AGREED (seller accepts) → FUNDED (buyer funds price+fee+commitment) → ARMED

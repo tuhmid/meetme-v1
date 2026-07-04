@@ -1,4 +1,4 @@
-import { applyAction, createDeal, requiresKyc, usd, PHONE_TIER_MAX_CENTS, type Action, type Deal, type LedgerEntry, type Role, type UseCase } from '@meetme/core';
+import { applyAction, createDeal, requiresKyc, usd, MIN_DEAL_CENTS, PHONE_TIER_MAX_CENTS, type Action, type Deal, type LedgerEntry, type Role, type UseCase } from '@meetme/core';
 import { authorize, type Channel } from './authz';
 import type { ServerCtx } from './ctx';
 import { ConflictError, type Repo } from './repo';
@@ -66,6 +66,7 @@ export async function createDealHandler(
 ): Promise<CreateDealResult> {
   if (input.creatorUserId === input.counterpartyUserId) return { ok: false, code: 'invalid', reason: 'cannot deal with yourself' };
   if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) return { ok: false, code: 'invalid', reason: 'amount must be a positive integer (cents)' };
+  if (input.amountCents < MIN_DEAL_CENTS) return { ok: false, code: 'invalid', reason: `Deals start at ${usd(MIN_DEAL_CENTS)} — below that the fees outweigh the item.` };
   if (!input.itemDescription || !input.itemDescription.trim()) return { ok: false, code: 'invalid', reason: 'item description required' };
 
   const creator = await repo.getUser(input.creatorUserId);

@@ -29,6 +29,8 @@ export interface Deal {
   sellerId: string;
   itemDescription: string;
   amountCents: number;
+  feeCentsPerSide: number;
+  commitmentCents: number;
   state: string;
   codeRevealed: boolean;
   buyerHeadedOut: boolean;

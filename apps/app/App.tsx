@@ -806,8 +806,8 @@ function nextActions(deal: Deal, role: Role): Action[] {
 function labelFor(a: Action, deal: Deal): string {
   switch (a.type) {
     case 'ACCEPT_TERMS': return 'Accept terms';
-    case 'FUND': return `Fund $${(deal.amountCents / 100).toFixed(0)} + $5 commitment`;
-    case 'POST_STAKE': return 'Post $5 commitment';
+    case 'FUND': return `Fund ${formatMoney(deal.amountCents + deal.feeCentsPerSide + deal.commitmentCents)} (item + ${formatMoney(deal.feeCentsPerSide)} fee + ${formatMoney(deal.commitmentCents)} refundable)`;
+    case 'POST_STAKE': return `Post ${formatMoney(deal.commitmentCents)} commitment`;
     case 'HEAD_OUT': return "I'm heading out";
     case 'ARRIVE': return "I've arrived";
     case 'REVEAL_CODE': return 'Reveal release code';

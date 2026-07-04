@@ -340,6 +340,37 @@ describe('safety — block & report', () => {
     expect((await app.inject({ method: 'POST', url: '/users/x/report', payload: { reason: 'y' } }) as any).statusCode).toBe(401);
   });
 
+  it('a block also mutes in-deal chat (both ways), while history stays readable', async () => {
+    const { post, get } = setup();
+    const maya = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;
+    const sam = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string;
+    const dealId = (await post('/deals', { counterpartyUserId: sam, itemDescription: 'x', amountCents: 100_00 }, maya)).json().dealId as string;
+    await post(`/deals/${dealId}/actions`, { action: { type: 'ACCEPT_TERMS' } }, sam);
+    expect((await post(`/deals/${dealId}/messages`, { body: 'hi' }, maya)).statusCode).toBe(200);
+
+    await post(`/users/${sam}/block`, {}, maya);
+    expect((await post(`/deals/${dealId}/messages`, { body: 'still there?' }, maya)).statusCode).toBe(403);
+    expect((await post(`/deals/${dealId}/messages`, { body: 'hello?' }, sam)).statusCode).toBe(403); // muted both ways
+    expect((await get(`/deals/${dealId}/messages`, sam)).json().messages.length).toBe(1); // history readable
+  });
+
+  it('deals below the $5 minimum are rejected (create + invite)', async () => {
+    const { post } = setup();
+    const maya = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;
+    const sam = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string;
+    expect((await post('/deals', { counterpartyUserId: sam, itemDescription: 'sticker', amountCents: 4_99 }, maya)).statusCode).toBe(400);
+    expect((await post('/invites', { counterpartyPhone: '+15552220000', itemDescription: 'sticker', amountCents: 4_99 }, maya)).statusCode).toBe(400);
+    expect((await post('/deals', { counterpartyUserId: sam, itemDescription: 'mug', amountCents: 5_00 }, maya)).statusCode).toBe(200);
+  });
+
+  it('you cannot invite your own phone number', async () => {
+    const { post } = setup();
+    const maya = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;
+    const r = await post('/invites', { counterpartyPhone: '555-111-0000', itemDescription: 'x', amountCents: 100_00 }, maya);
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error).toMatch(/own number/i);
+  });
+
   it('profile: public reputation + shared history, no phone leaked', async () => {
     const { post, get } = setup();
     const maya = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;

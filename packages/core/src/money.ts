@@ -26,6 +26,12 @@ export function computeCommitmentCents(amountCents: Cents): Cents {
 }
 
 /**
+ * Minimum deal size. Below this the flat fee + commitment dwarf the price and the
+ * escrow loop stops making sense ($5 item -> $10 out of pocket). Tunable.
+ */
+export const MIN_DEAL_CENTS: Cents = 5_00;
+
+/**
  * Phone-tier deal cap: deals up to this need only a verified phone; above it, the
  * creator must be ID-verified. Kept low-friction for v1; tune to the licensed
  * money partner's max.
