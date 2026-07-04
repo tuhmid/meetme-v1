@@ -8,7 +8,23 @@ import { api, type Action, type Deal, type Invite, type MeetupSpot, type Role, t
 import { supabase } from './src/supabase';
 import { registerForPush } from './src/push';
 import { ThemeProvider, useTheme, ThemeToggle } from './src/theme';
-import { UIGallery } from './src/ui';
+import {
+  Badge,
+  Button,
+  Callout,
+  Card,
+  DealCard,
+  DealHistoryRow,
+  MeetupField,
+  PresenceCard,
+  RatingStars,
+  SectionLabel,
+  Stepper,
+  TrustBanner,
+  UIGallery,
+  type IconName,
+  type Tone,
+} from './src/ui';
 import type { Theme } from './src/theme/types';
 
 // Two modes:
@@ -427,23 +443,26 @@ function AppRoot() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <Text style={{ fontSize: 30, fontWeight: '800', color: theme.colors.primary }}>MeetMe</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+          <Ionicons name="shield-checkmark" size={14} color={theme.colors.primary} />
+          <Text style={{ color: theme.colors.textDim, marginLeft: 6, fontSize: 13 }}>Escrow-protected in-person deals</Text>
+        </View>
         <View style={{ marginTop: 10, marginBottom: 6 }}><ThemeToggle /></View>
         <Text style={{ color: theme.colors.textDim, marginBottom: 22 }}>Sign in with your phone</Text>
         <TextInput value={name} onChangeText={setName} placeholder="Your name" style={inputStyle(theme)} />
         <TextInput value={phone} onChangeText={(t) => setPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" maxLength={12} style={inputStyle(theme)} />
         {!otpSent ? (
-          <Btn label="Send code" onPress={sendCode} />
+          <Button label="Send code" onPress={sendCode} style={{ marginTop: 4 }} />
         ) : (
           <>
             <TextInput value={otp} onChangeText={setOtp} placeholder="6-digit code (local: 123456)" keyboardType="number-pad" style={inputStyle(theme)} />
-            <Btn label="Verify & continue" onPress={verifyCode} />
-            <Pressable onPress={() => setOtpSent(false)}><Text style={{ color: theme.colors.primary, textAlign: 'center', marginTop: 4 }}>Use a different number</Text></Pressable>
+            <Button label="Verify & continue" onPress={verifyCode} style={{ marginTop: 4 }} />
+            <Pressable onPress={() => setOtpSent(false)}><Text style={{ color: theme.colors.primary, textAlign: 'center', marginTop: 12 }}>Use a different number</Text></Pressable>
           </>
         )}
         <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginVertical: 18 }}>— or —</Text>
-        <Pressable onPress={startDemo} style={{ borderColor: theme.colors.primary, borderWidth: 1.5, padding: 14, borderRadius: 12 }}>
-          <Text style={{ color: theme.colors.primary, textAlign: 'center', fontWeight: '700' }}>Demo mode (Maya & Sam on one device)</Text>
-        </Pressable>
+        <Button variant="secondary" label="Try the demo" onPress={startDemo} />
+        <Text style={{ color: theme.colors.textMuted, textAlign: 'center', fontSize: 12, marginTop: 6 }}>Play both sides — Maya & Sam on one device.</Text>
         {busy && <ActivityIndicator style={{ marginTop: 16 }} />}
         {!!err && <Text style={{ color: theme.colors.danger, marginTop: 12 }}>{err}</Text>}
       </ScrollView>
@@ -468,8 +487,8 @@ function AppRoot() {
           <View style={{ marginBottom: 12, alignItems: 'flex-start' }}><ThemeToggle /></View>
           <Animated.View style={{ opacity: screenFade }}>
           {!!banner && (
-            <Pressable onPress={() => setBanner('')} style={{ backgroundColor: theme.colors.successSoft, borderColor: theme.colors.primary, borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 10 }}>
-              <Text style={{ color: theme.colors.primary, fontWeight: '600' }}>{banner}</Text>
+            <Pressable onPress={() => setBanner('')} style={{ marginBottom: 10 }}>
+              <Callout tone="primary" title={banner} />
             </Pressable>
           )}
           {!!err && <Text style={{ color: theme.colors.danger, marginVertical: 8 }}>{err}</Text>}
@@ -478,265 +497,336 @@ function AppRoot() {
             <>
           {session && invites.length > 0 && (
             <>
-              <Text style={sectionLabelStyle(theme)}>Invites for you</Text>
+              <SectionLabel style={{ marginTop: 6 }}>Invites for you</SectionLabel>
               {invites.map((iv) => (
-                <View key={iv.token} style={cardStyle(theme)}>
-                  <Text style={{ fontWeight: '600' }}>{iv.inviterName} invited you</Text>
-                  <Text style={{ color: theme.colors.textDim }}>{iv.itemDescription} · {formatMoney(iv.amountCents)}</Text>
-                  <Text style={{ color: theme.colors.primary, marginBottom: 8, fontSize: 13 }}>You'll be the {iv.yourRole}</Text>
-                  <Btn label="Accept" onPress={() => acceptInvite(iv.token)} />
-                  <Pressable onPress={() => declineInvite(iv.token)}><Text style={{ color: theme.colors.danger, textAlign: 'center' }}>Decline</Text></Pressable>
-                </View>
+                <Card key={iv.token} style={{ marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Text numberOfLines={1} style={{ flex: 1, fontWeight: '700', fontSize: 16, color: theme.colors.text, marginRight: 10 }}>{iv.itemDescription}</Text>
+                    <Text style={{ fontWeight: '700', fontSize: 16, color: theme.colors.text }}>{formatMoney(iv.amountCents)}</Text>
+                  </View>
+                  <Text style={{ color: theme.colors.textDim, marginTop: 3, fontSize: 13 }}>from {iv.inviterName} · you'd be the {iv.yourRole}</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                    <View style={{ flex: 1 }}><Button label="Accept" onPress={() => acceptInvite(iv.token)} /></View>
+                    <View style={{ flex: 1 }}><Button variant="secondary" label="Decline" onPress={() => declineInvite(iv.token)} /></View>
+                  </View>
+                </Card>
               ))}
             </>
           )}
 
-          <Text style={sectionLabelStyle(theme)}>{session ? 'Invite someone to a deal' : 'New deal'}</Text>
-          <TextInput value={item} onChangeText={setItem} placeholder="Item (e.g. iPhone 12, 128GB)" style={inputStyle(theme)} />
-          <TextInput value={amountCents ? formatMoney(amountCents) : ''} onChangeText={(t) => setAmountCents(centsFromInput(t))} placeholder="$0.00" keyboardType="number-pad" style={inputStyle(theme)} />
-          {session ? (
-            <>
-              <TextInput value={cpPhone} onChangeText={(t) => setCpPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" maxLength={12} style={inputStyle(theme)} />
-              <View style={{ flexDirection: 'row', marginBottom: 8 }}>
-                <RolePick label="I'm buying" active={inviteRole === 'buyer'} onPress={() => setInviteRole('buyer')} />
-                <View style={{ width: 8 }} />
-                <RolePick label="I'm selling" active={inviteRole === 'seller'} onPress={() => setInviteRole('seller')} />
-              </View>
-              <Btn label={inviteValid() ? `Send invite (${formatMoney(amountCents)})` : 'Send invite'} disabled={!inviteValid()} onPress={inviteSomeone} />
-            </>
-          ) : (
-            <Btn label={dealValid() ? `Create deal (${formatMoney(amountCents)})` : 'Create deal'} disabled={!dealValid()} onPress={newDeal} />
-          )}
+          <SectionLabel style={{ marginTop: 14 }}>Start a deal</SectionLabel>
+          <Card>
+            <TextInput value={item} onChangeText={setItem} placeholder="Item (e.g. iPhone 12, 128GB)" style={inputStyle(theme)} />
+            <TextInput value={amountCents ? formatMoney(amountCents) : ''} onChangeText={(t) => setAmountCents(centsFromInput(t))} placeholder="$0.00" keyboardType="number-pad" style={inputStyle(theme)} />
+            {session ? (
+              <>
+                <TextInput value={cpPhone} onChangeText={(t) => setCpPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" maxLength={12} style={inputStyle(theme)} />
+                <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+                  <RolePick label="I'm buying" active={inviteRole === 'buyer'} onPress={() => setInviteRole('buyer')} />
+                  <View style={{ width: 8 }} />
+                  <RolePick label="I'm selling" active={inviteRole === 'seller'} onPress={() => setInviteRole('seller')} />
+                </View>
+                <Button label={inviteValid() ? `Send invite (${formatMoney(amountCents)})` : 'Send invite'} disabled={!inviteValid()} onPress={inviteSomeone} />
+              </>
+            ) : (
+              <Button label={dealValid() ? `Create deal (${formatMoney(amountCents)})` : 'Create deal'} disabled={!dealValid()} onPress={newDeal} style={{ marginTop: 4 }} />
+            )}
+          </Card>
 
-          <Text style={sectionLabelStyle(theme)}>Your deals</Text>
-          {deals.map((d) => {
-            const row = (
-              <Pressable onPress={() => openDeal(d.id)} style={cardStyle(theme)}>
-                <Text style={{ fontWeight: '600' }}>{d.itemDescription}</Text>
-                <Text style={{ color: theme.colors.textDim }}>{formatMoney(d.amountCents)} · {d.state}</Text>
-              </Pressable>
-            );
-            if (d.state !== 'DRAFT') return <View key={d.id}>{row}</View>;
-            return (
-              <Swipeable
-                key={d.id}
-                renderRightActions={() => (
-                  <Pressable onPress={() => deleteDraft(d.id)} style={{ backgroundColor: theme.colors.danger, justifyContent: 'center', paddingHorizontal: 22, borderRadius: 12, marginBottom: 10 }}>
-                    <Text style={{ color: theme.colors.surface, fontWeight: '700' }}>Delete</Text>
-                  </Pressable>
-                )}
-              >
-                {row}
-              </Swipeable>
-            );
-          })}
-          {deals.length === 0 && <Text style={{ color: theme.colors.textMuted }}>No deals yet.</Text>}
+          <SectionLabel style={{ marginTop: 20 }}>Your deals</SectionLabel>
+          {deals.length === 0 && invites.length === 0 && (
+            <Callout kicker="Get started" title="No deals yet" body="Invite someone above — money is held in escrow and only released when you both confirm the handoff." />
+          )}
+          {deals.length === 0 && invites.length > 0 && <Text style={{ color: theme.colors.textMuted }}>No deals yet.</Text>}
+          {deals.length > 0 && (
+            <Card padded={false} style={{ overflow: 'hidden' }}>
+              {deals.map((d, i) => {
+                const row = (
+                  <View style={{ backgroundColor: theme.colors.surface }}>
+                    <DealHistoryRow
+                      title={d.itemDescription}
+                      amountCents={d.amountCents}
+                      state={d.state}
+                      onPress={() => openDeal(d.id)}
+                      showDivider={i < deals.length - 1}
+                    />
+                  </View>
+                );
+                if (d.state !== 'DRAFT') return <View key={d.id}>{row}</View>;
+                return (
+                  <Swipeable
+                    key={d.id}
+                    renderRightActions={() => (
+                      <Pressable onPress={() => deleteDraft(d.id)} style={{ backgroundColor: theme.colors.danger, justifyContent: 'center', paddingHorizontal: 22 }}>
+                        <Text style={{ color: theme.colors.surface, fontWeight: '700' }}>Delete</Text>
+                      </Pressable>
+                    )}
+                  >
+                    {row}
+                  </Swipeable>
+                );
+              })}
+            </Card>
+          )}
           {session && <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 10 }}>Tip: swipe a draft deal left to delete it.</Text>}
             </>
           )}
 
-          {phase === 'deal' && deal && (
-            <>
-          <Pressable onPress={() => setPhase('home')}><Text style={{ color: theme.colors.primary, marginBottom: 8 }}>← My deals</Text></Pressable>
-          <Text style={{ fontSize: 22, fontWeight: '800' }}>{deal.itemDescription}</Text>
-          <Text style={{ color: theme.colors.textDim, marginBottom: 6 }}>{formatMoney(deal.amountCents)} · {deal.state}</Text>
-
-          {(() => {
-            const other: Role = myRole(deal) === 'buyer' ? 'seller' : 'buyer';
+          {phase === 'deal' && deal && (() => {
+            const role = myRole(deal);
+            const other: Role = role === 'buyer' ? 'seller' : 'buyer';
             const oName = other === 'buyer' ? names.buyer : names.seller;
+            const oFirst = oName.split(' ')[0];
             const oTrust = other === 'buyer' ? rep.buyerTrust : rep.sellerTrust;
             const oDeals = other === 'buyer' ? rep.buyerDeals : rep.sellerDeals;
+            const meName = role === 'buyer' ? names.buyer : names.seller;
+            const released = deal.state === 'RELEASED' || deal.state === 'DISPUTE_RESOLVED';
+            const actions = nextActions(deal, role);
+            const canSetSpot = ['DRAFT', 'AGREED', 'FUNDED', 'ARMED'].includes(deal.state);
+            const stepIndex = STEP_INDEX[deal.state];
+            const guidance = turnGuidance(deal, role, oFirst, session ? null : `(Demo: tap "View as ${oFirst}" above to act as them.)`);
+            const outcome = outcomeFor(deal, role, oFirst);
+            const hideTrustBanner = ['REFUNDED', 'CANCELLED', 'EXPIRED_NO_SHOW'].includes(deal.state);
+            const cancelLabel =
+              deal.state === 'DRAFT' && role === 'seller' ? 'Decline this deal'
+              : deal.state === 'DRAFT' || deal.state === 'AGREED' ? 'Cancel deal'
+              : deal.state === 'FUNDED' || deal.state === 'ARMED' ? 'Cancel deal — full refund'
+              : `Back out — forfeit ${formatMoney(deal.commitmentCents)}`;
             return (
-              <Pressable onPress={openProfile} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }} hitSlop={8}>
-                <Ionicons name="star" size={14} color={theme.colors.star} />
-                <Text style={{ color: theme.colors.textDim, marginLeft: 5 }}>{oName} · trust {oTrust ?? '—'}/100 · {oDeals} deal{oDeals === 1 ? '' : 's'}</Text>
-                <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} style={{ marginLeft: 2 }} />
-              </Pressable>
-            );
-          })()}
+              <>
+            <Pressable onPress={() => setPhase('home')}><Text style={{ color: theme.colors.primary, marginBottom: 10 }}>← My deals</Text></Pressable>
 
-          <TrustBanner amount={deal.amountCents} state={deal.state} role={myRole(deal)} onPress={() => setShowTrust(true)} />
+            <DealCard
+              item={deal.itemDescription}
+              amountCents={deal.amountCents}
+              tag={deal.state === 'RELEASED' ? 'RELEASED' : 'ESCROW'}
+              metaLine={deal.meetupName ?? 'No meetup spot yet'}
+              people={{ a: meName, b: oName, label: `You & ${oFirst}`, aColor: theme.colors[role], bColor: theme.colors[other] }}
+              // no star rating here: trustScore isn't a star average — the honest
+              // "trust N/100 · N deals" line below covers reputation until we
+              // aggregate real per-user star ratings.
+            />
 
-          {(() => {
-            const canSet = ['DRAFT', 'AGREED', 'FUNDED', 'ARMED'].includes(deal.state);
-            if (deal.meetupName) {
-              return (
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: deal.meetupCustom ? theme.colors.warning : theme.colors.primarySoft, borderRadius: 12, padding: 12, marginBottom: 12 }}>
-                  <Ionicons name="location" size={20} color={deal.meetupCustom ? theme.colors.danger : theme.colors.primary} />
-                  <View style={{ flex: 1, marginLeft: 8 }}>
-                    <Text style={{ fontWeight: '700' }} numberOfLines={1}>{deal.meetupName}</Text>
-                    <Text style={{ color: deal.meetupCustom ? theme.colors.danger : theme.colors.primary, fontSize: 12 }}>{deal.meetupCustom ? 'Custom spot — not verified' : 'Safe public spot'}</Text>
-                  </View>
-                  {canSet && <Pressable onPress={openMeetup} hitSlop={8}><Text style={{ color: theme.colors.primary, fontWeight: '600' }}>Change</Text></Pressable>}
-                </View>
-              );
-            }
-            return canSet ? <Btn label="Set a safe meeting spot" onPress={openMeetup} /> : null;
-          })()}
+            <Pressable onPress={openProfile} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 14 }} hitSlop={8}>
+              <Ionicons name="star" size={14} color={theme.colors.star} />
+              <Text style={{ color: theme.colors.textDim, marginLeft: 5, flex: 1 }}>{oName} · trust {oTrust ?? '—'}/100 · {oDeals} deal{oDeals === 1 ? '' : 's'}</Text>
+              <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
+            </Pressable>
 
-          {nextActions(deal, myRole(deal)).map((a, i) => (
-            <Btn key={i} label={labelFor(a, deal)} onPress={() => act(a)} />
-          ))}
-
-          {(deal.state === 'EN_ROUTE' || deal.state === 'AT_MEETUP') && (
-            mapUrl ? (
-              <View style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 12, backgroundColor: theme.colors.successSoft }}>
-                <Image source={{ uri: mapUrl }} style={{ width: '100%', height: 200 }} resizeMode="cover" />
-                <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primary, marginRight: 5 }} />
-                  <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 12 }}>LIVE</Text>
-                </View>
-                <View style={{ padding: 10 }}>
-                  <Text style={{ color: theme.colors.text }}>{names.buyer.split(' ')[0]}: <Text style={{ fontWeight: '700' }}>{presenceLabel(deal.buyerArrived, deal.buyerHeadedOut)}</Text>  ·  {names.seller.split(' ')[0]}: <Text style={{ fontWeight: '700' }}>{presenceLabel(deal.sellerArrived, deal.sellerHeadedOut)}</Text></Text>
-                  {geo?.distanceM != null && <Text style={{ color: theme.colors.textDim, marginTop: 2 }}>{geo.distanceM} m apart</Text>}
-                </View>
+            {stepIndex !== undefined && (
+              <View style={{ marginBottom: 14 }}>
+                <Stepper steps={['Agree', 'Fund', 'Commit', 'Meet', 'Done']} current={stepIndex} />
               </View>
-            ) : (
-              <PresenceMap deal={deal} myRole={myRole(deal)} names={names} distanceM={geo?.distanceM ?? null} />
-            )
-          )}
-          {deal.state === 'EN_ROUTE' && (
-            <>
-              <Btn label="Share my location" onPress={shareLocation} />
-              {geo && !geo.coLocated && geo.distanceM != null && (
-                <Text style={{ color: theme.colors.textDim, marginBottom: 4 }}>{geo.distanceM} m apart — keep going.</Text>
-              )}
-            </>
-          )}
+            )}
 
-          {deal.state === 'AT_MEETUP' && myRole(deal) === 'buyer' && deal.codeRevealed && (
-            <Text style={{ fontSize: 32, fontWeight: '800', letterSpacing: 6, color: theme.colors.primary, marginVertical: 12 }}>{code || '••••'}</Text>
-          )}
-          {deal.state === 'AT_MEETUP' && myRole(deal) === 'seller' && (
-            <View style={{ marginVertical: 8 }}>
-              <TextInput value={code} onChangeText={setCode} placeholder="release code" keyboardType="number-pad" style={inputStyle(theme)} />
-              <Btn label="Enter code" onPress={() => act({ type: 'ENTER_CODE', code })} />
-            </View>
-          )}
-
-          {!nextActions(deal, myRole(deal)).length && deal.state !== 'AT_MEETUP' && deal.state !== 'EN_ROUTE' && (
-            <Text style={{ color: theme.colors.textDim, marginVertical: 8 }}>
-              {session ? `Waiting on the other party…` : `Waiting on ${otherName()} — tap "View as ${otherName().split(' ')[0]}" above.`}
-            </Text>
-          )}
-
-          {['DRAFT', 'AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE'].includes(deal.state) && (
-            <Pressable onPress={cancelDeal} style={{ marginTop: 10 }}>
-              <Text style={{ color: theme.colors.danger, textAlign: 'center' }}>
-                {deal.state === 'EN_ROUTE' ? 'Back out (forfeits your commitment)' : 'Cancel this deal (full refund)'}
-              </Text>
-            </Pressable>
-          )}
-
-          {['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(deal.state) && (
-            <Pressable onPress={openDispute} style={{ marginTop: 10 }}>
-              <Text style={{ color: theme.colors.danger, textAlign: 'center' }}>Something wrong? Report a problem</Text>
-            </Pressable>
-          )}
-
-          {['AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
-            <Pressable onPress={reportOrBlock} style={{ marginTop: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-              <Ionicons name="flag-outline" size={14} color={theme.colors.textMuted} />
-              <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginLeft: 5 }}>Report or block {theirName()}</Text>
-            </Pressable>
-          )}
-
-          {['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(deal.state) && (
-            <Pressable
-              onPress={leaveSafely}
-              style={{ marginTop: 16, borderWidth: 1, borderColor: theme.colors.warning, backgroundColor: theme.colors.dangerSoft, borderRadius: 12, paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
-            >
-              <Ionicons name="shield-outline" size={16} color={theme.colors.danger} />
-              <Text style={{ color: theme.colors.danger, fontWeight: '700', marginLeft: 6 }}>Feel unsafe? Leave safely</Text>
-            </Pressable>
-          )}
-
-          {deal.state === 'DISPUTED' && (
-            <View style={{ backgroundColor: theme.colors.dangerSoft, borderColor: theme.colors.danger, borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 12 }}>
-              <Text style={{ fontWeight: '800', color: theme.colors.danger, marginBottom: 4 }}>Dispute open — funds frozen</Text>
-              <Text style={{ color: theme.colors.danger, marginBottom: 10 }}>Both sides explain what happened; a MeetMe specialist reviews and decides.</Text>
-              {deal.disputePositions.map((p, i) => (
-                <Text key={i} style={{ color: theme.colors.text, marginBottom: 6 }}><Text style={{ fontWeight: '700' }}>{p.actor}:</Text> {p.text}</Text>
-              ))}
-              <TextInput value={statement} onChangeText={setStatement} placeholder="Your account of what happened" multiline style={[inputStyle(theme), { minHeight: 60 }]} />
-              <Btn label="Submit statement" disabled={!statement.trim()} onPress={submitStatement} />
-
-              <Text style={{ color: theme.colors.danger, fontWeight: '700', marginTop: 6 }}>Agree on a resolution</Text>
-              <Text style={{ color: theme.colors.danger, fontSize: 12, marginBottom: 6 }}>
-                You: {deal.disputeProposals[myRole(deal)] ?? '—'} · Them: {deal.disputeProposals[myRole(deal) === 'buyer' ? 'seller' : 'buyer'] ?? '—'} — if you both pick the same, it resolves instantly.
-              </Text>
-              <View style={{ flexDirection: 'row', marginBottom: 10 }}>
-                <RolePick label="Release" active={deal.disputeProposals[myRole(deal)] === 'release'} onPress={() => propose('release')} />
-                <View style={{ width: 6 }} />
-                <RolePick label="Refund" active={deal.disputeProposals[myRole(deal)] === 'refund'} onPress={() => propose('refund')} />
-                <View style={{ width: 6 }} />
-                <RolePick label="Split" active={deal.disputeProposals[myRole(deal)] === 'split'} onPress={() => propose('split')} />
-              </View>
-
-              <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 4, marginBottom: 6 }}>Or a specialist decides (demo — admin/support console):</Text>
-              <View style={{ flexDirection: 'row' }}>
-                <RolePick label="Release" active={false} onPress={() => resolveDispute('release')} />
-                <View style={{ width: 6 }} />
-                <RolePick label="Refund" active={false} onPress={() => resolveDispute('refund')} />
-                <View style={{ width: 6 }} />
-                <RolePick label="Split" active={false} onPress={() => resolveDispute('split')} />
-              </View>
-            </View>
-          )}
-
-          {deal.state === 'DISPUTE_RESOLVED' && !!deal.resolutionNote && (
-            <View style={{ backgroundColor: theme.colors.successSoft, borderRadius: 12, padding: 14, marginTop: 12 }}>
-              <Text style={{ fontWeight: '700', color: theme.colors.primary }}>Dispute resolved</Text>
-              <Text style={{ color: theme.colors.text }}>{deal.resolutionNote}</Text>
-            </View>
-          )}
-
-          {(deal.state === 'RELEASED' || deal.state === 'DISPUTE_RESOLVED') && (
-            <View style={{ backgroundColor: theme.colors.surface, borderRadius: 12, padding: 14, marginTop: 12, borderWidth: 1, borderColor: theme.colors.border }}>
-              {deal.ratings[myRole(deal)] !== undefined ? (
-                <Text style={{ color: theme.colors.textDim }}>You rated {deal.ratings[myRole(deal)]}★ — thanks for the feedback!</Text>
-              ) : (
-                <>
-                  <Text style={{ fontWeight: '700', marginBottom: 8 }}>Rate your experience</Text>
-                  <StarPicker onPick={rate} />
-                </>
-              )}
-            </View>
-          )}
-
-          {['AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
-            <View style={{ marginTop: 18 }}>
-              <Text style={{ marginBottom: 6, color: theme.colors.textDim, fontWeight: '600' }}>Chat</Text>
-              <View style={{ backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, padding: 10 }}>
-                {messages.length === 0 ? (
-                  <Text style={{ color: theme.colors.textMuted, padding: 6 }}>No messages yet — coordinate your meetup here.</Text>
+            {!hideTrustBanner && (
+              <Pressable onPress={() => setShowTrust(true)}>
+                {released || FUNDED_STATES.includes(deal.state) ? (
+                  <TrustBanner amountCents={deal.amountCents} released={released} />
                 ) : (
-                  messages.map((m, i) => {
-                    const mine = m.senderId === myId();
-                    return (
-                      <View key={i} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', backgroundColor: mine ? theme.colors.primary : theme.colors.surfaceAlt, borderRadius: theme.radius.md, paddingHorizontal: 12, paddingVertical: 7, marginVertical: 3, maxWidth: '82%' }}>
-                        <Text style={{ color: mine ? theme.colors.onPrimary : theme.colors.text }}>{m.body}</Text>
-                      </View>
-                    );
-                  })
+                  // pre-funding: nothing is held yet — speak in the future tense
+                  <TrustBanner
+                    amountCents={deal.amountCents}
+                    title="Escrow protection"
+                    subtitle={`${formatMoney(deal.amountCents)} will be held by MeetMe until you both confirm the handoff.`}
+                  />
+                )}
+              </Pressable>
+            )}
+
+            {(FUNDED_STATES.includes(deal.state) || !!deal.meetupName) && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                {FUNDED_STATES.includes(deal.state) && <Badge label="Escrow funded" tone="success" iconName="lock-closed" />}
+                {!!deal.meetupName && (deal.meetupCustom
+                  ? <Badge label="Custom spot" tone="warning" iconName="alert-circle" />
+                  : <Badge label="Safe spot set" tone="primary" iconName="shield-checkmark" />)}
+              </View>
+            )}
+
+            {guidance && (
+              <View style={{ marginTop: 12 }}>
+                <Callout tone={guidance.tone} kicker={guidance.kicker} title={guidance.title} body={guidance.body} />
+              </View>
+            )}
+
+            {actions.length > 0 && (
+              <View style={{ marginTop: 12, gap: 8 }}>
+                {actions.map((a, i) => (
+                  <Button key={i} label={labelFor(a, deal)} iconName={iconFor(a)} onPress={() => act(a)} />
+                ))}
+              </View>
+            )}
+
+            {canSetSpot && (
+              <View style={{ marginTop: 16 }}>
+                <SectionLabel>Meetup spot</SectionLabel>
+                <MeetupField
+                  selected={deal.meetupName ?? undefined}
+                  custom={!!deal.meetupCustom}
+                  onPressSelected={openMeetup}
+                  onSearch={openMeetup}
+                />
+              </View>
+            )}
+
+            {(deal.state === 'EN_ROUTE' || deal.state === 'AT_MEETUP') && (
+              <View style={{ marginTop: 14, gap: 10 }}>
+                <PresenceCard
+                  live
+                  you={{
+                    label: `You (${role})`,
+                    status: presenceStatus(role === 'buyer' ? deal.buyerArrived : deal.sellerArrived, role === 'buyer' ? deal.buyerHeadedOut : deal.sellerHeadedOut, null),
+                    color: theme.colors[role],
+                  }}
+                  them={{
+                    label: `${oFirst} (${other})`,
+                    status: presenceStatus(other === 'buyer' ? deal.buyerArrived : deal.sellerArrived, other === 'buyer' ? deal.buyerHeadedOut : deal.sellerHeadedOut, geo?.distanceM ?? null),
+                    color: theme.colors[other],
+                  }}
+                  showRoute={!mapUrl}
+                />
+                {!!mapUrl && (
+                  <Card padded={false} style={{ overflow: 'hidden' }}>
+                    <Image source={{ uri: mapUrl }} style={{ width: '100%', height: 200 }} resizeMode="cover" />
+                    <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.surface, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.success, marginRight: 5 }} />
+                      <Text style={{ color: theme.colors.success, fontWeight: '700', fontSize: 12 }}>LIVE</Text>
+                    </View>
+                  </Card>
+                )}
+                {deal.state === 'EN_ROUTE' && (
+                  <>
+                    <Button variant="secondary" label="Share my live location" iconName="navigate" onPress={shareLocation} />
+                    {geo && !geo.coLocated && geo.distanceM != null && (
+                      <Text style={{ color: theme.colors.textDim }}>{geo.distanceM} m apart — keep going.</Text>
+                    )}
+                  </>
                 )}
               </View>
-              <View style={{ flexDirection: 'row', marginTop: 8 }}>
-                <TextInput value={msgInput} onChangeText={setMsgInput} placeholder="Message…" style={[inputStyle(theme), { flex: 1, marginBottom: 0 }]} onSubmitEditing={sendMessage} returnKeyType="send" />
-                <Pressable onPress={sendMessage} style={{ backgroundColor: theme.colors.primary, borderRadius: 10, paddingHorizontal: 16, justifyContent: 'center', marginLeft: 8 }} hitSlop={4}>
-                  <Ionicons name="send" size={18} color={theme.colors.onPrimary} />
-                </Pressable>
-              </View>
-            </View>
-          )}
+            )}
 
-          <Text style={{ marginTop: 18, marginBottom: 6, color: theme.colors.textDim, fontWeight: '600' }}>Money</Text>
-          {transfers.map((t, i) => (
-            <Text key={i} style={{ color: theme.colors.text }}>{t.direction} · {t.status} · ${(t.amountCents / 100).toFixed(2)}</Text>
-          ))}
-          {busy && <ActivityIndicator style={{ marginTop: 12 }} />}
-            </>
-          )}
+            {deal.state === 'AT_MEETUP' && role === 'buyer' && deal.codeRevealed && (
+              <Card style={{ marginTop: 14, alignItems: 'center' }}>
+                <Text style={{ fontSize: theme.type.size.xxl, fontWeight: theme.type.weight.bold, letterSpacing: 6, color: theme.colors.primary, textAlign: 'center' }}>{code || '••••'}</Text>
+                <Text style={{ color: theme.colors.textMuted, fontSize: theme.type.size.xs, marginTop: 8, textAlign: 'center' }}>Show this to the seller — don't text it.</Text>
+              </Card>
+            )}
+            {deal.state === 'AT_MEETUP' && role === 'seller' && (
+              <View style={{ marginTop: 14 }}>
+                <TextInput value={code} onChangeText={setCode} placeholder="release code" keyboardType="number-pad" style={inputStyle(theme)} />
+                <Button label="Verify code" iconName="key" onPress={() => act({ type: 'ENTER_CODE', code })} />
+              </View>
+            )}
+
+            {deal.state === 'DISPUTED' && (
+              <View style={{ marginTop: 14, gap: 10 }}>
+                <Callout tone="danger" kicker="Dispute open" title="Funds are frozen" body="Both sides explain what happened; a MeetMe specialist reviews and decides." />
+                <Card>
+                  <SectionLabel>Statements</SectionLabel>
+                  {deal.disputePositions.map((p, i) => (
+                    <Text key={i} style={{ color: theme.colors.text, marginBottom: 6 }}><Text style={{ fontWeight: '700' }}>{p.actor}:</Text> {p.text}</Text>
+                  ))}
+                  <TextInput value={statement} onChangeText={setStatement} placeholder="Your account of what happened" multiline style={[inputStyle(theme), { minHeight: 60 }]} />
+                  <Button label="Submit statement" disabled={!statement.trim()} onPress={submitStatement} />
+                </Card>
+                <Card>
+                  <SectionLabel>Agree on a resolution</SectionLabel>
+                  <Text style={{ color: theme.colors.textDim, fontSize: 12, marginBottom: 8 }}>
+                    You: {deal.disputeProposals[role] ?? '—'} · Them: {deal.disputeProposals[other] ?? '—'} — if you both pick the same, it resolves instantly.
+                  </Text>
+                  <View style={{ flexDirection: 'row', marginBottom: 10 }}>
+                    <RolePick label="Release" active={deal.disputeProposals[role] === 'release'} onPress={() => propose('release')} />
+                    <View style={{ width: 6 }} />
+                    <RolePick label="Refund" active={deal.disputeProposals[role] === 'refund'} onPress={() => propose('refund')} />
+                    <View style={{ width: 6 }} />
+                    <RolePick label="Split" active={deal.disputeProposals[role] === 'split'} onPress={() => propose('split')} />
+                  </View>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 4, marginBottom: 6 }}>Or a specialist decides (demo — admin/support console):</Text>
+                  <View style={{ flexDirection: 'row' }}>
+                    <RolePick label="Release" active={false} onPress={() => resolveDispute('release')} />
+                    <View style={{ width: 6 }} />
+                    <RolePick label="Refund" active={false} onPress={() => resolveDispute('refund')} />
+                    <View style={{ width: 6 }} />
+                    <RolePick label="Split" active={false} onPress={() => resolveDispute('split')} />
+                  </View>
+                </Card>
+              </View>
+            )}
+
+            {outcome && (
+              <View style={{ marginTop: 14 }}>
+                <Callout tone={outcome.tone} kicker={outcome.kicker} title={outcome.title} body={outcome.body} />
+              </View>
+            )}
+
+            {released && (
+              <Card style={{ marginTop: 12 }}>
+                {deal.ratings[role] !== undefined ? (
+                  <Text style={{ color: theme.colors.textDim }}>You rated {deal.ratings[role]}★ — thanks!</Text>
+                ) : (
+                  <>
+                    <Text style={{ fontWeight: '700', marginBottom: 10, color: theme.colors.text }}>Rate your experience</Text>
+                    <RatingStars value={0} size={32} onPick={rate} />
+                  </>
+                )}
+              </Card>
+            )}
+
+            {['AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
+              <View style={{ marginTop: 20 }}>
+                <SectionLabel>Chat</SectionLabel>
+                <Card padded={false} style={{ padding: 10 }}>
+                  {messages.length === 0 ? (
+                    <Text style={{ color: theme.colors.textMuted, padding: 6 }}>No messages yet — coordinate your meetup here.</Text>
+                  ) : (
+                    messages.map((m, i) => {
+                      const mine = m.senderId === myId();
+                      return (
+                        <View key={i} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', backgroundColor: mine ? theme.colors.primary : theme.colors.surfaceAlt, borderRadius: theme.radius.md, paddingHorizontal: 12, paddingVertical: 7, marginVertical: 3, maxWidth: '82%' }}>
+                          <Text style={{ color: mine ? theme.colors.onPrimary : theme.colors.text }}>{m.body}</Text>
+                        </View>
+                      );
+                    })
+                  )}
+                </Card>
+                <View style={{ flexDirection: 'row', marginTop: 8 }}>
+                  <TextInput value={msgInput} onChangeText={setMsgInput} placeholder="Message…" style={[inputStyle(theme), { flex: 1, marginBottom: 0 }]} onSubmitEditing={sendMessage} returnKeyType="send" />
+                  <Pressable onPress={sendMessage} style={{ backgroundColor: theme.colors.primary, borderRadius: theme.radius.md, paddingHorizontal: 16, justifyContent: 'center', marginLeft: 8 }} hitSlop={4}>
+                    <Ionicons name="send" size={18} color={theme.colors.onPrimary} />
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
+            {['DRAFT', 'AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE'].includes(deal.state) && (
+              <Button variant="dangerGhost" label={cancelLabel} onPress={cancelDeal} style={{ marginTop: 18 }} />
+            )}
+
+            {['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(deal.state) && (
+              <Button variant="dangerGhost" iconName="shield" label="Feel unsafe? Leave safely" onPress={leaveSafely} style={{ marginTop: 10 }} />
+            )}
+
+            {['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(deal.state) && (
+              <Pressable onPress={openDispute} style={{ marginTop: 14 }}>
+                <Text style={{ color: theme.colors.danger, textAlign: 'center' }}>Something wrong? Report a problem</Text>
+              </Pressable>
+            )}
+
+            {['AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
+              <Pressable onPress={reportOrBlock} style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="flag-outline" size={14} color={theme.colors.textMuted} />
+                <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginLeft: 5 }}>Report or block {theirName()}</Text>
+              </Pressable>
+            )}
+
+            <SectionLabel style={{ marginTop: 22 }}>Money</SectionLabel>
+            {transfers.map((t, i) => (
+              <Text key={i} style={{ color: theme.colors.textMuted, fontSize: 13 }}>{t.direction} · {t.status} · ${(t.amountCents / 100).toFixed(2)}</Text>
+            ))}
+            {busy && <ActivityIndicator style={{ marginTop: 12 }} />}
+              </>
+            );
+          })()}
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -755,32 +845,34 @@ function AppRoot() {
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.colors.overlay }}>
           <View style={{ backgroundColor: theme.colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 30, maxHeight: '88%' }}>
             <ScrollView keyboardShouldPersistTaps="handled">
-              <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 4 }}>Find a fair meeting spot</Text>
+              <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 4, color: theme.colors.text }}>Find a fair meeting spot</Text>
               <Text style={{ color: theme.colors.textDim, marginBottom: 14 }}>Safe public spots roughly halfway — balanced by drive time for both of you. Enter where you're coming from (this is only used to find the midpoint).</Text>
               <TextInput value={comingFrom} onChangeText={setComingFrom} placeholder="Your starting area or address" style={inputStyle(theme)} />
-              <Btn label="Find spots from this address" onPress={shareFromAddress} />
-              <Pressable onPress={shareFromCurrentLocation} style={{ marginBottom: 8 }}><Text style={{ color: theme.colors.primary, textAlign: 'center', fontWeight: '600' }}>Or use my current location</Text></Pressable>
+              <Button label="Find spots from this address" iconName="search" onPress={shareFromAddress} />
+              <Button variant="secondary" label="Use my current location" iconName="locate" onPress={shareFromCurrentLocation} style={{ marginTop: 8, marginBottom: 8 }} />
               {!!meetupMsg && <Text style={{ color: theme.colors.textDim, marginBottom: 10 }}>{meetupMsg}</Text>}
               {deal && suggestions.map((s, i) => {
                 const mine = myRole(deal) === 'buyer' ? s.minutesBuyer : s.minutesSeller;
                 const theirs = myRole(deal) === 'buyer' ? s.minutesSeller : s.minutesBuyer;
                 return (
-                  <Pressable key={i} onPress={() => chooseMeetup(s)} style={[cardStyle(theme), { flexDirection: 'row', alignItems: 'center' }]}>
-                    <Ionicons name={s.tier === 'verified' ? 'shield-checkmark' : 'business'} size={20} color={s.tier === 'verified' ? theme.colors.primary : theme.colors.textDim} />
-                    <View style={{ flex: 1, marginLeft: 10 }}>
-                      <Text style={{ fontWeight: '600' }} numberOfLines={1}>{s.name}</Text>
-                      <Text style={{ color: theme.colors.textDim, fontSize: 12 }}>{s.tier === 'verified' ? 'Verified · ' : s.category + ' · '}{mine != null ? `you ${mine}m` : '—'} · {theirs != null ? `them ${theirs}m` : '—'}</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={theme.colors.primarySoft} />
+                  <Pressable key={i} onPress={() => chooseMeetup(s)}>
+                    <Card style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
+                      <Ionicons name={s.tier === 'verified' ? 'shield-checkmark' : 'business'} size={20} color={s.tier === 'verified' ? theme.colors.primary : theme.colors.textDim} />
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={{ fontWeight: '600', color: theme.colors.text }} numberOfLines={1}>{s.name}</Text>
+                        <Text style={{ color: theme.colors.textDim, fontSize: 12 }}>{s.tier === 'verified' ? 'Verified · ' : s.category + ' · '}{mine != null ? `you ${mine}m` : '—'} · {theirs != null ? `them ${theirs}m` : '—'}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                    </Card>
                   </Pressable>
                 );
               })}
-              <View style={{ height: 1, backgroundColor: theme.colors.successSoft, marginVertical: 14 }} />
-              <Text style={{ fontWeight: '700', marginBottom: 4 }}>Custom spot</Text>
+              <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: 14 }} />
+              <Text style={{ fontWeight: '700', marginBottom: 4, color: theme.colors.text }}>Custom spot</Text>
               <Text style={{ color: theme.colors.textDim, fontSize: 12, marginBottom: 8 }}>Pick your own place — but it won't be a verified safe location.</Text>
               <TextInput value={customSpot} onChangeText={setCustomSpot} placeholder="Custom address" style={inputStyle(theme)} />
-              <Btn label="Use a custom spot" onPress={useCustomSpot} />
-              <Pressable onPress={() => setMeetupOpen(false)} style={{ marginTop: 4 }}><Text style={{ color: theme.colors.textDim, textAlign: 'center' }}>Close</Text></Pressable>
+              <Button variant="secondary" label="Use a custom spot" onPress={useCustomSpot} />
+              <Pressable onPress={() => setMeetupOpen(false)} style={{ marginTop: 12 }}><Text style={{ color: theme.colors.textDim, textAlign: 'center' }}>Close</Text></Pressable>
             </ScrollView>
           </View>
         </View>
@@ -807,13 +899,26 @@ function nextActions(deal: Deal, role: Role): Action[] {
 function labelFor(a: Action, deal: Deal): string {
   switch (a.type) {
     case 'ACCEPT_TERMS': return 'Accept terms';
-    case 'FUND': return `Fund ${formatMoney(deal.amountCents + deal.feeCentsPerSide + deal.commitmentCents)} (item + ${formatMoney(deal.feeCentsPerSide)} fee + ${formatMoney(deal.commitmentCents)} refundable)`;
+    case 'FUND': return `Fund ${formatMoney(deal.amountCents + deal.feeCentsPerSide + deal.commitmentCents)}`;
     case 'POST_STAKE': return `Post ${formatMoney(deal.commitmentCents)} commitment`;
     case 'HEAD_OUT': return "I'm heading out";
     case 'ARRIVE': return "I've arrived";
     case 'REVEAL_CODE': return 'Reveal release code';
     case 'CONFIRM_RECEIVED': return "Confirm I've got it";
     default: return a.type;
+  }
+}
+// natural leading icon for a primary action button (presentational only)
+function iconFor(a: Action): IconName | undefined {
+  switch (a.type) {
+    case 'ACCEPT_TERMS': return 'checkmark-circle';
+    case 'FUND': return 'lock-closed';
+    case 'POST_STAKE': return 'lock-closed';
+    case 'HEAD_OUT': return 'walk';
+    case 'ARRIVE': return 'location';
+    case 'REVEAL_CODE': return 'key';
+    case 'CONFIRM_RECEIVED': return 'checkmark';
+    default: return undefined;
   }
 }
 // friendly one-liner shown as a banner when the deal moves to a new state
@@ -833,34 +938,90 @@ function stateBanner(s: string): string {
   return m[s] ?? `Now: ${s}`;
 }
 
-const initials = (name: string): string =>
-  name.trim().split(/\s+/).map((w) => w[0] ?? '').join('').slice(0, 2).toUpperCase() || '?';
-const presenceLabel = (arrived: boolean, headedOut: boolean): string =>
-  arrived ? 'arrived' : headedOut ? 'heading over' : 'not left';
 const FUNDED_STATES = ['FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'];
 
-// Trust reassurance line on the deal screen — tap for the "how it works" explainer.
-function TrustBanner({ amount, state, role, onPress }: { amount: number; state: string; role: Role; onPress: () => void }) {
-  const theme = useTheme();
-  const funded = FUNDED_STATES.includes(state);
-  const text = !funded
-    ? 'Funds are held safely in escrow until handoff'
-    : role === 'buyer'
-      ? `Your ${formatMoney(amount)} is safe in escrow`
-      : `The buyer's ${formatMoney(amount)} is secured in escrow`;
-  return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.successSoft, borderRadius: 10, padding: 12, marginBottom: 12 }}>
-      <Ionicons name="shield-checkmark" size={20} color={theme.colors.primary} />
-      <Text style={{ color: theme.colors.primary, fontWeight: '600', marginLeft: 8, flex: 1 }}>{text}</Text>
-      <Text style={{ color: theme.colors.primary, fontSize: 12, marginRight: 2 }}>How it works</Text>
-      <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
-    </Pressable>
-  );
+// deal state → Stepper index (terminal failure states are intentionally absent:
+// the Stepper is hidden for them and the outcome Callout tells the story instead)
+const STEP_INDEX: Record<string, number> = {
+  DRAFT: 0,
+  AGREED: 1,
+  FUNDED: 2,
+  ARMED: 3,
+  EN_ROUTE: 3,
+  AT_MEETUP: 3,
+  CONFIRMING: 3,
+  RELEASED: 4,
+  DISPUTE_RESOLVED: 4,
+};
+
+// presence status line for the PresenceCard rows
+const presenceStatus = (arrived: boolean, headedOut: boolean, distanceM: number | null): string =>
+  arrived ? 'arrived' : headedOut ? (distanceM != null ? `${distanceM} m away` : 'heading over') : 'not left yet';
+
+// Whose move is it, and why it's safe — powers the guidance Callout on the deal screen.
+function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHint: string | null): { tone: Tone; kicker: string; title: string; body: string } | null {
+  const s = deal.state;
+  if (!['DRAFT', 'AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(s)) return null;
+  const myTurn = nextActions(deal, role).length > 0 || (s === 'AT_MEETUP' && role === 'seller');
+  if (myTurn) {
+    let title = 'Your move';
+    let body = '';
+    if (s === 'DRAFT') { title = 'Review and accept the terms'; body = 'Nothing is charged until the buyer funds the escrow.'; }
+    else if (s === 'AGREED') { title = 'Fund the escrow'; body = `${formatMoney(deal.amountCents)} item + ${formatMoney(deal.feeCentsPerSide)} fee + ${formatMoney(deal.commitmentCents)} refundable commitment. MeetMe holds it all — the seller is only paid after you confirm the handoff.`; }
+    else if (s === 'FUNDED') { title = 'Post your commitment'; body = 'A small refundable stake that keeps both sides serious about showing up.'; }
+    else if (s === 'ARMED') { title = "Head out when you're ready"; body = 'Funds are locked in escrow — nothing moves until the handoff.'; }
+    else if (s === 'EN_ROUTE') { title = 'Tap arrive when you get there'; body = 'Share your live location on the way so you can find each other.'; }
+    else if (s === 'AT_MEETUP' && role === 'buyer') { title = 'Reveal the release code'; body = 'Check the item first — the code is what releases the money.'; }
+    else if (s === 'AT_MEETUP' && role === 'seller') { title = 'Enter the code the buyer shows you'; body = 'The code confirms the buyer is releasing the payment.'; }
+    else if (s === 'CONFIRMING') { title = 'Confirm you got the item'; body = "This releases the payment to the seller — confirm only once it's in your hands."; }
+    return { tone: 'primary', kicker: 'Your turn', title, body };
+  }
+  let body = "Hang tight — you're covered by escrow either way.";
+  if (s === 'DRAFT') body = 'They need to accept the terms. Nothing has been charged yet.';
+  else if (s === 'AGREED') body = "They're funding the escrow — you'll see it locked here the moment it lands.";
+  else if (s === 'FUNDED') body = `Your money is already locked safely in escrow. ${otherFirst} just needs to post their commitment.`;
+  else if (s === 'EN_ROUTE') body = "You've arrived — wait somewhere public until they get there.";
+  else if (s === 'AT_MEETUP') body = 'Show them the code below. Nothing moves until you confirm you got the item.';
+  else if (s === 'CONFIRMING') body = "Code verified — hand over the item now. If they don't confirm, funds auto-release within 60 minutes; you're protected.";
+  return { tone: 'neutral', kicker: 'Waiting', title: `Waiting on ${otherFirst}`, body: demoHint ? `${body} ${demoHint}` : body };
 }
 
+// What concretely happened to the money — the terminal-state outcome Callout.
+function outcomeFor(deal: Deal, role: Role, otherFirst: string): { tone: Tone; kicker: string; title: string; body: string } | null {
+  const total = formatMoney(deal.amountCents + deal.feeCentsPerSide + deal.commitmentCents);
+  const price = formatMoney(deal.amountCents);
+  const commit = formatMoney(deal.commitmentCents);
+  switch (deal.state) {
+    case 'RELEASED':
+      return role === 'buyer'
+        ? { tone: 'success', kicker: 'Deal complete', title: 'Payment released', body: `You paid ${total}. ${price} went to the seller and your ${commit} commitment came back.` }
+        : { tone: 'success', kicker: 'Deal complete', title: 'You got paid', body: `${price} is on its way to you, and your ${commit} commitment came back.` };
+    case 'DISPUTE_RESOLVED':
+      return { tone: 'success', kicker: 'Resolved', title: 'Dispute resolved', body: deal.resolutionNote || 'A specialist reviewed the case and settled the funds.' };
+    case 'REFUNDED':
+      return role === 'buyer'
+        ? { tone: 'neutral', kicker: 'Refunded', title: 'You got everything back', body: `${total} was returned to you in full.` }
+        : { tone: 'neutral', kicker: 'Refunded', title: 'Deal refunded', body: `The buyer was refunded and your ${commit} commitment came back. No money changed hands.` };
+    case 'CANCELLED':
+      return { tone: 'neutral', kicker: 'Cancelled', title: 'Deal cancelled', body: 'Anything already funded was returned in full.' };
+    case 'EXPIRED_NO_SHOW': {
+      const iArrived = role === 'buyer' ? deal.buyerArrived : deal.sellerArrived;
+      const theyArrived = role === 'buyer' ? deal.sellerArrived : deal.buyerArrived;
+      const body = iArrived && !theyArrived
+        ? `${otherFirst} didn't show. You were refunded in full, and their ${commit} commitment was forfeited.`
+        : !iArrived && theyArrived
+          ? `You didn't make it, so your ${commit} commitment was forfeited. Everything else was returned.`
+          : `Nobody made it to the meetup. Commitments were forfeited and the rest was returned.`;
+      return { tone: 'warning', kicker: 'No-show', title: 'Deal expired', body };
+    }
+  }
+  return null;
+}
+
+// Trust explainer — how escrow protects both sides. Opened from the TrustBanner.
 function TrustModal({ visible, amount, onClose }: { visible: boolean; amount: number; onClose: () => void }) {
   const theme = useTheme();
-  const rows: Array<[keyof typeof Ionicons.glyphMap, string, string]> = [
+  const rows: Array<[IconName, string, string]> = [
     ['lock-closed', 'Held in escrow', `Your ${amount ? formatMoney(amount) : 'payment'} is held by MeetMe — never sent to the other person up front.`],
     ['cash-outline', 'Released only on handoff', 'The seller is paid only after you confirm you got the item, using a one-time release code.'],
     ['shield-checkmark', 'No-show protection', 'If the other person never shows, you are fully refunded — and their $5 commitment is forfeited.'],
@@ -881,7 +1042,7 @@ function TrustModal({ visible, amount, onClose }: { visible: boolean; amount: nu
               </View>
             </View>
           ))}
-          <Btn label="Got it" onPress={onClose} />
+          <Button label="Got it" onPress={onClose} />
         </View>
       </View>
     </Modal>
@@ -966,7 +1127,7 @@ function ProfileModal({ visible, loading, profile, onClose, onReportBlock }: {
                 <Text style={{ color: theme.colors.danger, marginLeft: 6, fontWeight: '600' }}>Report or block</Text>
               </Pressable>
               <View style={{ height: 12 }} />
-              <Btn label="Close" onPress={onClose} />
+              <Button label="Close" onPress={onClose} />
             </ScrollView>
           )}
         </View>
@@ -975,69 +1136,8 @@ function ProfileModal({ visible, loading, profile, onClose, onReportBlock }: {
   );
 }
 
-// Stylized live presence card (the map look): both avatars on a route line toward
-// the meetup pin, positioned by status. (Real map = react-native-maps later.)
-function PresenceMap({ deal, myRole, names, distanceM }: { deal: Deal; myRole: Role; names: { buyer: string; seller: string }; distanceM: number | null }) {
-  const theme = useTheme();
-  const prog = (arrived: boolean, headedOut: boolean) => (arrived ? 0.82 : headedOut ? 0.48 : 0.08);
-  const label = (mine: boolean, arrived: boolean, headedOut: boolean) =>
-    mine ? (distanceM != null ? `${distanceM}m · you` : 'you') : arrived ? 'Arrived' : headedOut ? 'heading over' : 'not left';
-  const Dot = ({ p, name, color, mine, arrived, headedOut }: { p: number; name: string; color: string; mine: boolean; arrived: boolean; headedOut: boolean }) => (
-    <View style={{ position: 'absolute', top: 30, left: `${p * 100}%`, width: 46, marginLeft: -23, alignItems: 'center' }}>
-      <View style={{ position: 'absolute', top: -22, backgroundColor: theme.colors.surface, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: theme.colors.border }}>
-        <Text style={{ fontSize: 11, color: theme.colors.text }} numberOfLines={1}>{label(mine, arrived, headedOut)}</Text>
-      </View>
-      <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: color, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: theme.colors.surface }}>
-        <Text style={{ color: theme.colors.surface, fontWeight: '800' }}>{initials(name)}</Text>
-      </View>
-    </View>
-  );
-  return (
-    <View style={{ backgroundColor: theme.colors.successSoft, borderRadius: 16, padding: 16, marginBottom: 12 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Ionicons name="location" size={18} color={theme.colors.primary} />
-          <Text style={{ fontWeight: '700', color: theme.colors.text, marginLeft: 4 }}>Meetup</Text>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primary, marginRight: 5 }} />
-          <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 12 }}>LIVE</Text>
-        </View>
-      </View>
-      <View style={{ height: 84 }}>
-        <View style={{ position: 'absolute', left: 6, right: 30, top: 52, borderBottomWidth: 2, borderColor: theme.colors.primarySoft, borderStyle: 'dashed' }} />
-        <View style={{ position: 'absolute', right: 0, top: 40 }}><Ionicons name="location" size={26} color={theme.colors.primary} /></View>
-        <Dot p={prog(deal.buyerArrived, deal.buyerHeadedOut)} name={names.buyer} color={theme.colors.buyer} mine={myRole === 'buyer'} arrived={deal.buyerArrived} headedOut={deal.buyerHeadedOut} />
-        <Dot p={prog(deal.sellerArrived, deal.sellerHeadedOut)} name={names.seller} color={theme.colors.seller} mine={myRole === 'seller'} arrived={deal.sellerArrived} headedOut={deal.sellerHeadedOut} />
-      </View>
-    </View>
-  );
-}
-
 // ---- tiny UI bits ----
-const cardStyle = (theme: Theme) => ({ backgroundColor: theme.colors.surface, borderRadius: theme.radius.md, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: theme.colors.border } as const);
-const sectionLabelStyle = (theme: Theme) => ({ marginTop: 18, marginBottom: 8, color: theme.colors.textDim, fontWeight: '600' } as const);
 const inputStyle = (theme: Theme) => ({ backgroundColor: theme.colors.surface, borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: theme.spacing.md, fontSize: theme.type.size.md, marginBottom: theme.spacing.sm } as const);
-function Btn({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
-  const theme = useTheme();
-  return (
-    <Pressable onPress={disabled ? undefined : onPress} style={{ backgroundColor: disabled ? theme.colors.primarySoft : theme.colors.primary, padding: 15, borderRadius: theme.radius.md, marginBottom: 8 }}>
-      <Text style={{ color: theme.colors.onPrimary, textAlign: 'center', fontWeight: '700' }}>{label}</Text>
-    </Pressable>
-  );
-}
-function StarPicker({ onPick }: { onPick: (n: number) => void }) {
-  const theme = useTheme();
-  return (
-    <View style={{ flexDirection: 'row' }}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <Pressable key={n} onPress={() => onPick(n)} style={{ marginRight: 6 }} hitSlop={6}>
-          <Ionicons name="star-outline" size={34} color={theme.colors.star} />
-        </Pressable>
-      ))}
-    </View>
-  );
-}
 function RolePick({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   const theme = useTheme();
   return (
@@ -1061,7 +1161,7 @@ function RoleBar({ viewAs, users, onToggle }: { viewAs: Role; users: DemoUsers; 
 }
 
 // Dev switch: render the UI-kit gallery instead of the app (design review only).
-const SHOW_UI_GALLERY = true;
+const SHOW_UI_GALLERY = false;
 
 export default function App() {
   return (
