@@ -8,6 +8,7 @@ import { api, type Action, type Deal, type Invite, type MeetupSpot, type Role, t
 import { supabase } from './src/supabase';
 import { registerForPush } from './src/push';
 import { ThemeProvider, useTheme, ThemeToggle } from './src/theme';
+import { UIGallery } from './src/ui';
 import type { Theme } from './src/theme/types';
 
 // Two modes:
@@ -1059,10 +1060,13 @@ function RoleBar({ viewAs, users, onToggle }: { viewAs: Role; users: DemoUsers; 
   );
 }
 
+// Dev switch: render the UI-kit gallery instead of the app (design review only).
+const SHOW_UI_GALLERY = true;
+
 export default function App() {
   return (
     <ThemeProvider>
-      <AppRoot />
+      {SHOW_UI_GALLERY ? <UIGallery /> : <AppRoot />}
     </ThemeProvider>
   );
 }
