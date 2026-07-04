@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeetMe — Trust-first Fintech theme</title>
+<style>
+  /* ── design tokens mirrored from src/theme/fintech.ts (exact values) ── */
+  :root{
+    --bg:#F5F7FA; --surface:#FFFFFF; --surfaceAlt:#EDF1F5;
+    --text:#0F1C2E; --textDim:#4A5A6B; --textMuted:#8A99A8;
+    --primary:#0B4F6E; --onPrimary:#FFFFFF; --primarySoft:#E4EFF3; --primaryBorder:#BBD4DD;
+    --success:#0E9F6E; --successSoft:#E1F5EC;
+    --danger:#C4362F; --dangerSoft:#FBE7E4;
+    --warning:#B5760C; --warningSoft:#FBEFD3;
+    --info:#2563B5;
+    --buyer:#0D9488; --seller:#5B54D6;
+    --border:#DCE3EA; --overlay:rgba(11,42,58,0.45); --star:#F5B942;
+    --accent:#37B5A8;
+    --ring:rgba(11,79,110,0.35);
+    /* gradients */
+    --grad-brand:linear-gradient(180deg,#0B4F6E 0%,#0A6E77 100%);
+    --grad-trust:linear-gradient(135deg,#0E6E62 0%,#0B516B 100%);
+    --grad-sheet:linear-gradient(180deg,#F5F9FB 0%,#EAF1F5 100%);
+    /* radii */
+    --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-pill:999px;
+    --r-button:14px; --r-card:18px; --r-sheet:28px; --r-input:12px; --r-banner:16px;
+    /* shadows (tinted ink-navy, never black) */
+    --shadow-card:0 2px 10px rgba(11,42,58,0.06);
+    --shadow-sheet:0 14px 28px rgba(11,42,58,0.14);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.4;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px;}
+
+  /* header */
+  header.hero{
+    background:var(--grad-brand);
+    color:var(--onPrimary);
+    border-radius:var(--r-xl);
+    padding:36px 32px;
+    box-shadow:var(--shadow-sheet);
+    position:relative;overflow:hidden;
+  }
+  header.hero::after{
+    content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;
+    background:radial-gradient(circle at center,rgba(55,181,168,0.55),transparent 70%);
+  }
+  .hero .eyebrow{
+    text-transform:uppercase;letter-spacing:.14em;font-size:12px;font-weight:600;
+    opacity:.8;margin:0 0 10px;
+  }
+  .hero h1{margin:0 0 10px;font-size:34px;font-weight:700;letter-spacing:-.02em;}
+  .hero p{margin:0;max-width:640px;font-size:16px;line-height:1.55;opacity:.92;}
+  .hero .chips{margin-top:20px;display:flex;gap:8px;flex-wrap:wrap;}
+  .hero .chips span{
+    font-size:12px;font-weight:600;padding:6px 12px;border-radius:var(--r-pill);
+    background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22);
+  }
+
+  section{margin-top:48px;}
+  h2.section-title{
+    font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--textDim);margin:0 0 4px;
+  }
+  .section-sub{font-size:14px;color:var(--textMuted);margin:0 0 20px;}
+
+  /* palette */
+  .swatch-grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:14px;
+  }
+  .swatch{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
+    overflow:hidden;box-shadow:var(--shadow-card);
+  }
+  .swatch .chip{height:74px;position:relative;}
+  .swatch .meta{padding:10px 12px;}
+  .swatch .role{font-size:13px;font-weight:600;color:var(--text);}
+  .swatch .hex{font-size:12px;color:var(--textMuted);font-variant-numeric:tabular-nums;margin-top:2px;letter-spacing:.02em;}
+  .swatch .chip .onchip{
+    position:absolute;left:10px;bottom:8px;font-size:11px;font-weight:600;
+  }
+  .grp-label{
+    grid-column:1/-1;font-size:12px;font-weight:700;color:var(--textMuted);
+    text-transform:uppercase;letter-spacing:.1em;margin:10px 0 -4px;
+  }
+
+  /* type scale */
+  .type-row{
+    display:flex;align-items:baseline;gap:20px;padding:14px 0;border-bottom:1px solid var(--border);
+  }
+  .type-row:last-child{border-bottom:none;}
+  .type-spec{
+    flex:0 0 132px;font-size:12px;color:var(--textMuted);font-variant-numeric:tabular-nums;
+  }
+  .type-spec b{color:var(--textDim);font-weight:600;}
+  .type-sample{color:var(--text);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  /* spacing */
+  .spacing-row{display:flex;align-items:center;gap:16px;margin-bottom:12px;}
+  .spacing-row .lbl{flex:0 0 96px;font-size:13px;color:var(--textDim);font-weight:600;}
+  .spacing-row .lbl small{color:var(--textMuted);font-weight:400;}
+  .spacing-bar{height:16px;border-radius:var(--r-sm);background:var(--grad-brand);}
+
+  /* radius + elevation */
+  .tile-row{display:flex;gap:20px;flex-wrap:wrap;}
+  .tile{display:flex;flex-direction:column;align-items:center;gap:10px;}
+  .tile .box{
+    width:104px;height:78px;background:var(--surface);border:1px solid var(--border);
+  }
+  .tile .cap{font-size:12px;color:var(--textMuted);}
+  .tile .cap b{color:var(--textDim);font-weight:600;}
+  .elev-card{width:150px;height:96px;background:var(--surface);border-radius:var(--r-card);border:1px solid var(--border);box-shadow:var(--shadow-card);}
+  .elev-sheet{width:150px;height:96px;background:var(--surface);border-radius:var(--r-sheet);box-shadow:var(--shadow-sheet);}
+
+  /* ── phone frame + sample components ── */
+  .phone-stage{display:flex;justify-content:center;}
+  .phone{
+    width:390px;max-width:100%;background:var(--bg);
+    border-radius:44px;padding:16px 14px 26px;
+    border:1px solid var(--border);
+    box-shadow:var(--shadow-sheet);
+    position:relative;
+  }
+  .phone .notch{width:132px;height:26px;background:var(--text);border-radius:var(--r-pill);margin:2px auto 16px;opacity:.9;}
+  .stack > *{margin-bottom:14px;}
+  .stack > *:last-child{margin-bottom:0;}
+  .comp-label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--textMuted);margin:18px 4px 8px;}
+  .comp-label:first-child{margin-top:0;}
+
+  /* primary CTA — gradient, soft-premium radius, tactile */
+  .btn{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    width:100%;min-height:52px;border:none;cursor:pointer;
+    font-size:16px;font-weight:600;letter-spacing:.01em;
+    border-radius:var(--r-button);
+  }
+  .btn-primary{
+    background:var(--grad-brand);color:var(--onPrimary);
+    box-shadow:0 6px 16px rgba(11,79,110,0.28), inset 0 1px 0 rgba(255,255,255,0.16);
+  }
+  .btn-secondary{
+    background:var(--surface);color:var(--primary);
+    border:1.5px solid var(--primaryBorder);
+    box-shadow:var(--shadow-card);
+  }
+  .btn-danger{
+    background:var(--surface);color:var(--danger);
+    border:1.5px solid var(--dangerSoft);
+    box-shadow:none;
+  }
+  .btn-danger .dot{width:8px;height:8px;border-radius:var(--r-pill);background:var(--danger);}
+
+  /* deal-summary card */
+  .card{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--r-card);box-shadow:var(--shadow-card);
+    padding:18px;
+  }
+  .card .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .card .item{font-size:18px;font-weight:600;color:var(--text);}
+  .card .sub{font-size:13px;color:var(--textMuted);margin-top:2px;}
+  .card .amount{font-size:26px;font-weight:700;letter-spacing:-.01em;color:var(--text);font-variant-numeric:tabular-nums;}
+  .card .divider{height:1px;background:var(--border);margin:14px -18px;}
+  .kv{display:flex;justify-content:space-between;font-size:14px;padding:5px 0;}
+  .kv .k{color:var(--textDim);}
+  .kv .v{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums;}
+
+  /* trust / escrow banner — gradient, premium */
+  .escrow{
+    background:var(--grad-trust);color:#EAF6F3;
+    border-radius:var(--r-banner);padding:16px 18px;
+    display:flex;gap:14px;align-items:flex-start;
+    position:relative;overflow:hidden;
+    box-shadow:0 8px 20px rgba(11,81,107,0.24);
+  }
+  .escrow::after{
+    content:"";position:absolute;right:-40px;bottom:-50px;width:150px;height:150px;
+    background:radial-gradient(circle,rgba(55,181,168,0.45),transparent 70%);
+  }
+  .escrow .shield{
+    flex:0 0 40px;height:40px;border-radius:12px;
+    background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.28);
+    display:flex;align-items:center;justify-content:center;font-size:20px;position:relative;z-index:1;
+  }
+  .escrow .etxt{position:relative;z-index:1;}
+  .escrow .etxt .t{font-size:15px;font-weight:700;color:#FFFFFF;}
+  .escrow .etxt .d{font-size:13px;line-height:1.45;margin-top:3px;opacity:.9;}
+
+  /* text input */
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--textDim);margin-bottom:6px;}
+  .input{
+    width:100%;min-height:50px;background:var(--surfaceAlt);
+    border:1.5px solid var(--border);border-radius:var(--r-input);
+    padding:0 16px;font-size:16px;color:var(--text);display:flex;align-items:center;
+  }
+  .input.focus{
+    background:var(--surface);border-color:var(--primary);
+    box-shadow:0 0 0 4px var(--ring);
+  }
+  .input .ph{color:var(--textMuted);}
+  .input .val{color:var(--text);}
+  .field .hint{font-size:12px;color:var(--textMuted);margin-top:6px;}
+
+  /* badge / pill */
+  .pill-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:13px;font-weight:600;padding:7px 12px;border-radius:var(--r-pill);
+  }
+  .pill-verified{background:var(--primarySoft);color:var(--primary);border:1px solid var(--primaryBorder);}
+  .pill-paid{background:var(--successSoft);color:#0b7a54;border:1px solid #BFE7D4;}
+  .pill .tick{width:15px;height:15px;border-radius:var(--r-pill);background:var(--primary);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;}
+  .pill-paid .tick{background:var(--success);}
+
+  /* presence dots */
+  .presence{display:flex;gap:22px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);padding:14px 18px;box-shadow:var(--shadow-card);}
+  .presence .p{display:flex;align-items:center;gap:10px;}
+  .dot{width:12px;height:12px;border-radius:var(--r-pill);position:relative;}
+  .dot.buyer{background:var(--buyer);box-shadow:0 0 0 4px rgba(13,148,136,0.16);}
+  .dot.seller{background:var(--seller);box-shadow:0 0 0 4px rgba(91,84,214,0.16);}
+  .presence .who{font-size:14px;font-weight:600;color:var(--text);}
+  .presence .st{font-size:12px;color:var(--textMuted);}
+
+  /* deal-history rows */
+  .history{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow-card);overflow:hidden;}
+  .hrow{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);}
+  .hrow:last-child{border-bottom:none;}
+  .hrow .ic{flex:0 0 38px;height:38px;border-radius:12px;background:var(--surfaceAlt);display:flex;align-items:center;justify-content:center;font-size:16px;}
+  .hrow .hmain{flex:1;min-width:0;}
+  .hrow .hitem{font-size:15px;font-weight:600;color:var(--text);}
+  .hrow .hmeta{font-size:12px;color:var(--textMuted);margin-top:1px;}
+  .hrow .hamt{font-size:15px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;}
+  .state{font-size:11px;font-weight:700;padding:3px 9px;border-radius:var(--r-pill);letter-spacing:.02em;}
+  .state.released{background:var(--successSoft);color:#0b7a54;}
+  .state.held{background:var(--primarySoft);color:var(--primary);}
+  .state.refunded{background:var(--dangerSoft);color:var(--danger);}
+
+  .footnote{margin-top:40px;font-size:12px;color:var(--textMuted);text-align:center;line-height:1.6;}
+  code{background:var(--surfaceAlt);border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:12px;color:var(--textDim);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 1 ─ Title header -->
+  <header class="hero">
+    <p class="eyebrow">MeetMe · Design tokens</p>
+    <h1>Trust-first Fintech theme</h1>
+    <p>A confident money-app re-skin: a deep <strong>harbor blue-teal</strong> brand, cool "clean-vault" neutrals, and restrained semantic accents. The feeling is calm authority over money between two strangers — <em>your funds are protected here</em>.</p>
+    <div class="chips">
+      <span>Primary #0B4F6E</span>
+      <span>Light mode</span>
+      <span>4pt spacing</span>
+      <span>Soft-premium radii</span>
+      <span>Ink-tinted elevation</span>
+    </div>
+  </header>
+
+  <!-- 2 ─ Palette -->
+  <section>
+    <h2 class="section-title">Palette</h2>
+    <p class="section-sub">Every functional role, reskinned onto the fintech brand. Text pairs verified ≥ 4.5:1.</p>
+    <div class="swatch-grid">
+
+      <div class="grp-label">Surfaces &amp; text</div>
+      <div class="swatch"><div class="chip" style="background:#F5F7FA;border-bottom:1px solid var(--border)"><span class="onchip" style="color:#0F1C2E">Aa</span></div><div class="meta"><div class="role">bg</div><div class="hex">#F5F7FA</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#FFFFFF;border-bottom:1px solid var(--border)"><span class="onchip" style="color:#0F1C2E">Aa</span></div><div class="meta"><div class="role">surface</div><div class="hex">#FFFFFF</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#EDF1F5;border-bottom:1px solid var(--border)"><span class="onchip" style="color:#0F1C2E">Aa</span></div><div class="meta"><div class="role">surfaceAlt</div><div class="hex">#EDF1F5</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#0F1C2E"><span class="onchip" style="color:#fff">Aa 16.0:1</span></div><div class="meta"><div class="role">text</div><div class="hex">#0F1C2E</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#4A5A6B"><span class="onchip" style="color:#fff">Aa 6.6:1</span></div><div class="meta"><div class="role">textDim</div><div class="hex">#4A5A6B</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#8A99A8"><span class="onchip" style="color:#fff">Aa</span></div><div class="meta"><div class="role">textMuted</div><div class="hex">#8A99A8</div></div></div>
+
+      <div class="grp-label">Brand</div>
+      <div class="swatch"><div class="chip" style="background:#0B4F6E"><span class="onchip" style="color:#fff">onPrimary 8.9:1</span></div><div class="meta"><div class="role">primary</div><div class="hex">#0B4F6E</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#37B5A8"><span class="onchip" style="color:#08302f">accent</span></div><div class="meta"><div class="role">accent</div><div class="hex">#37B5A8</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#E4EFF3;border-bottom:1px solid var(--border)"><span class="onchip" style="color:#0B4F6E">Aa</span></div><div class="meta"><div class="role">primarySoft</div><div class="hex">#E4EFF3</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#BBD4DD"><span class="onchip" style="color:#0B4F6E">Aa</span></div><div class="meta"><div class="role">primaryBorder</div><div class="hex">#BBD4DD</div></div></div>
+
+      <div class="grp-label">Semantic states</div>
+      <div class="swatch"><div class="chip" style="background:#0E9F6E"><span class="onchip" style="color:#fff">released / paid</span></div><div class="meta"><div class="role">success</div><div class="hex">#0E9F6E</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#E1F5EC;border-bottom:1px solid var(--border)"><span class="onchip" style="color:#0b7a54">Aa</span></div><div class="meta"><div class="role">successSoft</div><div class="hex">#E1F5EC</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#C4362F"><span class="onchip" style="color:#fff">on danger 5.4:1</span></div><div class="meta"><div class="role">danger</div><div class="hex">#C4362F</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#FBE7E4;border-bottom:1px solid var(--border)"><span class="onchip" style="color:#C4362F">Aa</span></div><div class="meta"><div class="role">dangerSoft</div><div class="hex">#FBE7E4</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#B5760C"><span class="onchip" style="color:#fff">warning</span></div><div class="meta"><div class="role">warning</div><div class="hex">#B5760C</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#FBEFD3;border-bottom:1px solid var(--border)"><span class="onchip" style="color:#8a5c07">Aa</span></div><div class="meta"><div class="role">warningSoft</div><div class="hex">#FBEFD3</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#2563B5"><span class="onchip" style="color:#fff">info</span></div><div class="meta"><div class="role">info</div><div class="hex">#2563B5</div></div></div>
+
+      <div class="grp-label">Counterparties &amp; misc</div>
+      <div class="swatch"><div class="chip" style="background:#0D9488"><span class="onchip" style="color:#fff">buyer</span></div><div class="meta"><div class="role">buyer</div><div class="hex">#0D9488</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#5B54D6"><span class="onchip" style="color:#fff">seller</span></div><div class="meta"><div class="role">seller</div><div class="hex">#5B54D6</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#DCE3EA"><span class="onchip" style="color:#4A5A6B">border</span></div><div class="meta"><div class="role">border</div><div class="hex">#DCE3EA</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#F5B942"><span class="onchip" style="color:#5a3d00">star ★</span></div><div class="meta"><div class="role">star</div><div class="hex">#F5B942</div></div></div>
+      <div class="swatch"><div class="chip" style="background:repeating-linear-gradient(45deg,#F5F7FA 0 8px,#DCE3EA 8px 16px)"><span style="position:absolute;inset:0;background:rgba(11,42,58,0.45)"></span><span class="onchip" style="color:#fff;z-index:1">scrim over content</span></div><div class="meta"><div class="role">overlay</div><div class="hex">rgba(11,42,58,.45)</div></div></div>
+    </div>
+  </section>
+
+  <!-- 3 ─ Type scale -->
+  <section>
+    <h2 class="section-title">Type scale</h2>
+    <p class="section-sub">System font for now. Body is 16px minimum. Weights 400 / 500 / 600 / 700.</p>
+    <div>
+      <div class="type-row"><div class="type-spec"><b>display</b> · 40 / 700</div><div class="type-sample" style="font-size:40px;font-weight:700;letter-spacing:-.02em">$1,240 secured</div></div>
+      <div class="type-row"><div class="type-spec"><b>xxl</b> · 34 / 700</div><div class="type-sample" style="font-size:34px;font-weight:700;letter-spacing:-.01em">Held in escrow</div></div>
+      <div class="type-row"><div class="type-spec"><b>xl</b> · 28 / 600</div><div class="type-sample" style="font-size:28px;font-weight:600">Confirm handoff</div></div>
+      <div class="type-row"><div class="type-spec"><b>lg</b> · 22 / 600</div><div class="type-sample" style="font-size:22px;font-weight:600">Meet at a safe spot</div></div>
+      <div class="type-row"><div class="type-spec"><b>md</b> · 18 / 500</div><div class="type-sample" style="font-size:18px;font-weight:500">iPhone 13 · 128GB</div></div>
+      <div class="type-row"><div class="type-spec"><b>base</b> · 16 / 400</div><div class="type-sample" style="font-size:16px;font-weight:400">Your money stays protected until both sides confirm the exchange.</div></div>
+      <div class="type-row"><div class="type-spec"><b>sm</b> · 14 / 400</div><div class="type-sample" style="font-size:14px;font-weight:400;color:var(--textDim)">Released to seller · 2 min ago</div></div>
+      <div class="type-row"><div class="type-spec"><b>xs</b> · 12 / 600</div><div class="type-sample" style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--textMuted)">ID verified</div></div>
+    </div>
+  </section>
+
+  <!-- 4 ─ Spacing -->
+  <section>
+    <h2 class="section-title">Spacing scale</h2>
+    <p class="section-sub">4pt grid — the rhythm behind padding, gaps and insets.</p>
+    <div>
+      <div class="spacing-row"><div class="lbl">xs <small>4</small></div><div class="spacing-bar" style="width:4px"></div></div>
+      <div class="spacing-row"><div class="lbl">sm <small>8</small></div><div class="spacing-bar" style="width:8px"></div></div>
+      <div class="spacing-row"><div class="lbl">md <small>12</small></div><div class="spacing-bar" style="width:12px"></div></div>
+      <div class="spacing-row"><div class="lbl">lg <small>16</small></div><div class="spacing-bar" style="width:16px"></div></div>
+      <div class="spacing-row"><div class="lbl">xl <small>24</small></div><div class="spacing-bar" style="width:24px"></div></div>
+      <div class="spacing-row"><div class="lbl">xxl <small>32</small></div><div class="spacing-bar" style="width:32px"></div></div>
+    </div>
+  </section>
+
+  <!-- 5 ─ Radius + Elevation -->
+  <section>
+    <h2 class="section-title">Radius &amp; Elevation</h2>
+    <p class="section-sub">Soft-premium corners. Shadows are subtle and tinted toward ink-navy — never pure black.</p>
+    <div class="tile-row" style="margin-bottom:28px">
+      <div class="tile"><div class="box" style="border-radius:8px"></div><div class="cap"><b>sm</b> · 8</div></div>
+      <div class="tile"><div class="box" style="border-radius:12px"></div><div class="cap"><b>md</b> · 12</div></div>
+      <div class="tile"><div class="box" style="border-radius:16px"></div><div class="cap"><b>lg</b> · 16</div></div>
+      <div class="tile"><div class="box" style="border-radius:24px"></div><div class="cap"><b>xl</b> · 24</div></div>
+      <div class="tile"><div class="box" style="border-radius:999px"></div><div class="cap"><b>pill</b> · 999</div></div>
+    </div>
+    <div class="tile-row">
+      <div class="tile"><div class="elev-card"></div><div class="cap"><b>shadow.card</b> · y2 blur10 · 6%</div></div>
+      <div class="tile"><div class="elev-sheet"></div><div class="cap"><b>shadow.sheet</b> · y14 blur28 · 14%</div></div>
+    </div>
+  </section>
+
+  <!-- 6 ─ Sample components -->
+  <section>
+    <h2 class="section-title">Sample components</h2>
+    <p class="section-sub">The fintech design language in a ~390px phone column: gradient CTAs, ink-tinted elevation, soft-premium cards, and a gradient escrow banner.</p>
+    <div class="phone-stage">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="stack">
+
+          <div class="comp-label">Primary CTA</div>
+          <button class="btn btn-primary">Confirm &amp; release $240</button>
+
+          <div class="comp-label">Secondary / ghost</div>
+          <button class="btn btn-secondary">View meetup details</button>
+
+          <div class="comp-label">Danger — safety exit</div>
+          <button class="btn btn-danger"><span class="dot"></span>Feel unsafe? Leave safely</button>
+
+          <div class="comp-label">Deal summary</div>
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div class="item">iPhone 13 · 128GB</div>
+                <div class="sub">Midnight · very good condition</div>
+              </div>
+              <div class="amount">$240</div>
+            </div>
+            <div class="divider"></div>
+            <div class="kv"><span class="k">Escrow status</span><span class="v" style="color:var(--primary)">Funds held</span></div>
+            <div class="kv"><span class="k">Meetup</span><span class="v">Today · 5:30 PM</span></div>
+            <div class="kv"><span class="k">Location</span><span class="v">Precinct 14 · safe spot</span></div>
+          </div>
+
+          <div class="comp-label">Trust / escrow banner</div>
+          <div class="escrow">
+            <div class="shield">&#128274;</div>
+            <div class="etxt">
+              <div class="t">Held in escrow</div>
+              <div class="d">$240 is locked and protected. It only releases when <strong>both</strong> of you confirm the handoff.</div>
+            </div>
+          </div>
+
+          <div class="comp-label">Text input</div>
+          <div class="field">
+            <label>Meetup place</label>
+            <div class="input focus"><span class="val">Central Library — front steps</span></div>
+            <div class="hint">Public, camera-covered spots are recommended.</div>
+          </div>
+
+          <div class="comp-label">Badges</div>
+          <div class="pill-row">
+            <span class="pill pill-verified"><span class="tick">&#10003;</span>ID verified</span>
+            <span class="pill pill-paid"><span class="tick">&#10003;</span>Payment funded</span>
+          </div>
+
+          <div class="comp-label">Buyer &amp; seller presence</div>
+          <div class="presence">
+            <div class="p"><span class="dot buyer"></span><div><div class="who">You · Buyer</div><div class="st">Arrived · 5:28 PM</div></div></div>
+            <div class="p"><span class="dot seller"></span><div><div class="who">Mara · Seller</div><div class="st">2 min away</div></div></div>
+          </div>
+
+          <div class="comp-label">Deal history</div>
+          <div class="history">
+            <div class="hrow">
+              <div class="ic">&#128241;</div>
+              <div class="hmain"><div class="hitem">iPhone 13</div><div class="hmeta">Jun 28 · with Mara</div></div>
+              <div style="text-align:right"><div class="hamt">$240</div><span class="state released">Released</span></div>
+            </div>
+            <div class="hrow">
+              <div class="ic">&#127911;</div>
+              <div class="hmain"><div class="hitem">AirPods Pro</div><div class="hmeta">Jun 20 · with Devon</div></div>
+              <div style="text-align:right"><div class="hamt">$95</div><span class="state held">In escrow</span></div>
+            </div>
+            <div class="hrow">
+              <div class="ic">&#127918;</div>
+              <div class="hmain"><div class="hitem">Nintendo Switch</div><div class="hmeta">Jun 11 · with Priya</div></div>
+              <div style="text-align:right"><div class="hamt">$180</div><span class="state refunded">Refunded</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="footnote">
+    Values mirror <code>src/theme/fintech.ts</code> exactly. Brand extensions in use here: <code>gradients.brand</code>, <code>gradients.trust</code>, <code>componentRadius</code>, <code>ring</code>, <code>accent</code>.<br/>
+    Light mode only · MeetMe — Trust-first Fintech theme
+  </p>
+
+</div>
+</body>
+</html>

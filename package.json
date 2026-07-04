@@ -1,0 +1,23 @@
+{
+  "name": "meetme-v1",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/api"],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p apps/api/tsconfig.json",
+    "api:dev": "node --env-file=.env --import tsx apps/api/src/index.ts",
+    "worker:dev": "node --env-file=.env --import tsx apps/api/src/worker.ts",
+    "db:start": "SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN=local-dev-not-a-real-secret PATH=\"/Applications/Docker.app/Contents/Resources/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\" DOCKER_HOST=\"unix://$HOME/.docker/run/docker.sock\" supabase start",
+    "db:stop": "PATH=\"/Applications/Docker.app/Contents/Resources/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\" DOCKER_HOST=\"unix://$HOME/.docker/run/docker.sock\" supabase stop",
+    "db:reset": "SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN=local-dev-not-a-real-secret PATH=\"/Applications/Docker.app/Contents/Resources/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\" DOCKER_HOST=\"unix://$HOME/.docker/run/docker.sock\" supabase db reset",
+    "db:studio": "open http://127.0.0.1:54323",
+    "smoke": "set -a; . ./.env; set +a; vitest run smoke"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

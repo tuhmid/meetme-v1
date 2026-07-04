@@ -1,0 +1,15 @@
+{
+  "name": "@meetme/server",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@meetme/core": "*",
+    "@supabase/supabase-js": "^2.110.0",
+    "plaid": "^43.0.0"
+  }
+}

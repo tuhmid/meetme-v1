@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "MeetMe",
+    "slug": "meetme",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {},
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "MeetMe uses your location to detect when you and the other person have arrived at the meetup spot."
+        }
+      ],
+      "expo-notifications",
+      "expo-font"
+    ]
+  }
+}

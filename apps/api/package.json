@@ -1,0 +1,11 @@
+{
+  "name": "@meetme/api",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@meetme/core": "*",
+    "@meetme/server": "*",
+    "fastify": "^5.9.0"
+  }
+}

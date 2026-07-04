@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+
+# secrets / local env (keep .env.example)
+.env
+.env.*
+!.env.example
+*.local
+
+# builds / output
+dist/
+build/
+*.tsbuildinfo
+
+# Expo / React Native
+.expo/
+.expo-shared/
+apps/app/.expo/
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+*.orig.*
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+
+# logs / os
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+coverage/
