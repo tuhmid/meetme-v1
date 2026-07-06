@@ -65,5 +65,16 @@ KYC partner is wired.)
 One account per phone (real Supabase-Auth). A **trust score** (0–100) accrues from
 ratings after completed deals; no-shows / at-fault dispute outcomes ding it.
 
+## Proposed (pending decision): frictionless seller commitment
+Drop the seller's upfront $5 stake (removes the POST_STAKE turn — FUND arms the
+deal directly). Instead the seller keeps a card on file ($0 validation at accept),
+a **$5 authorization hold** is placed when someone heads out, and it's **captured
+only on a no-show** — routed to the person who got stood up, not the company.
+Buyer protection is unchanged (refunds always come from escrow); the stake was
+deterrence, not compensation capital. Risk to manage: post-hoc collection can fail
+(prepaid/empty cards, chargebacks) — hence the hold rather than a naked charge,
+plus trust-nuke + ban on collection failure. Stripe (SetupIntent + manual-capture
+PaymentIntent) is the natural rail; Trustap would replace this mechanic entirely.
+
 > Note: everything money-related runs on **FakeRail (test-mode)** until a licensed
 > partner + fintech-attorney sign-off. See `docs/PLACEHOLDERS.md`.

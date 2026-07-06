@@ -1069,9 +1069,20 @@ function ProfileModal({ visible, loading, profile, onClose, onReportBlock }: {
       <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.colors.overlay }}>
         <View style={{ backgroundColor: theme.colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 34, maxHeight: '86%' }}>
           {loading || !profile ? (
-            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-              <ActivityIndicator color={theme.colors.primary} />
-              <Text style={{ color: theme.colors.textMuted, marginTop: 10 }}>Loading profile…</Text>
+            // Loading AND failure both land here — never trap the user without an exit.
+            <View style={{ paddingVertical: 30, alignItems: 'center' }}>
+              {loading ? (
+                <>
+                  <ActivityIndicator color={theme.colors.primary} />
+                  <Text style={{ color: theme.colors.textMuted, marginTop: 10, marginBottom: 20 }}>Loading profile…</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="cloud-offline-outline" size={28} color={theme.colors.textMuted} />
+                  <Text style={{ color: theme.colors.textDim, marginTop: 10, marginBottom: 20 }}>Couldn't load this profile — try again in a moment.</Text>
+                </>
+              )}
+              <Button label="Close" variant="secondary" onPress={onClose} />
             </View>
           ) : (
             <ScrollView keyboardShouldPersistTaps="handled">
