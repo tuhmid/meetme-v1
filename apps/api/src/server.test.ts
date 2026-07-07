@@ -108,12 +108,43 @@ describe('M3 API — drives a full deal over HTTP (the walking skeleton spine)',
     const inbox = (await get('/invites', sam)).json().invites;
     expect(inbox.some((i: any) => i.token === token && i.inviterName === 'Maya')).toBe(true);
 
+    // Sam is the seller — accepting seals terms, so a card is required first.
+    const noCard = await post(`/invites/${token}/accept`, {}, sam);
+    expect(noCard.statusCode).toBe(400);
+    expect(noCard.json().code).toBe('card_required');
+    await post('/payment-method', {}, sam);
+
     const accepted = await post(`/invites/${token}/accept`, {}, sam);
     expect(accepted.statusCode).toBe(200);
     const dealId = accepted.json().dealId as string;
     const view = (await get(`/deals/${dealId}`, sam)).json();
     expect(view.deal.buyerId).toBe(maya);
     expect(view.deal.sellerId).toBe(sam);
+    expect(view.deal.state).toBe('AGREED'); // no separate Accept-terms turn — buyer just funds next
+  });
+
+  it('seller-initiated invite: the inviter (seller) needs a card up front; accepter lands in AGREED as buyer', async () => {
+    const app = buildServer({ repo: new MemoryRepo(), rail: new FakeRail({ instantSettle: true }), makeCtx: () => makeServerCtx(), allowDev: true });
+    const post = (url: string, payload: object, uid?: string): Promise<any> =>
+      app.inject({ method: 'POST', url, payload, headers: uid ? { authorization: `Bearer dev:${uid}` } : {} }) as Promise<any>;
+    const get = (url: string, uid: string): Promise<any> => app.inject({ method: 'GET', url, headers: { authorization: `Bearer dev:${uid}` } }) as Promise<any>;
+
+    const sam = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string; // the seller/inviter
+    const maya = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string; // the buyer/accepter
+
+    const blocked = await post('/invites', { counterpartyPhone: '+15551110000', itemDescription: 'Concert ticket', amountCents: 80_00, role: 'seller' }, sam);
+    expect(blocked.statusCode).toBe(400);
+    expect(blocked.json().code).toBe('card_required');
+
+    await post('/payment-method', {}, sam);
+    const token = (await post('/invites', { counterpartyPhone: '+15551110000', itemDescription: 'Concert ticket', amountCents: 80_00, role: 'seller' }, sam)).json().token as string;
+
+    const accepted = await post(`/invites/${token}/accept`, {}, maya); // buyer accepts — no card needed
+    expect(accepted.statusCode).toBe(200);
+    const view = (await get(`/deals/${accepted.json().dealId}`, maya)).json();
+    expect(view.deal.sellerId).toBe(sam);
+    expect(view.deal.buyerId).toBe(maya);
+    expect(view.deal.state).toBe('AGREED');
   });
 
   it('profile name sync: POST /profile updates the name the counterparty sees', async () => {

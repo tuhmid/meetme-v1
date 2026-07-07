@@ -86,6 +86,19 @@ function useAppState() {
     try { await fn(); } catch (e: any) { setErr(String(e.message ?? e)); } finally { setBusy(false); }
   };
 
+  // Seller needs a card on file before their side is sealed — offer to add one and retry.
+  const promptAddCard = (retry: () => Promise<void>, depositCents = 500) => {
+    const deposit = formatMoney(depositCents);
+    Alert.alert(
+      'Add a card to continue',
+      `You're only ever charged if you don't show up — a ${deposit} deposit hold is placed when you head out, released when the deal completes. (Test mode: a fake Visa is used.)`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Add card', onPress: () => run(async () => { await api.addPaymentMethod(bearer()); await retry(); }) },
+      ]
+    );
+  };
+
   const showDeal = (d: Deal, tr?: Transfer[]) => {
     if (lastState.current && lastState.current !== d.state) { gentle(); setBanner(stateBanner(d.state)); }
     lastState.current = d.state;
@@ -203,15 +216,24 @@ function useAppState() {
           ]);
           return;
         }
+        if (e?.code === 'card_required') { promptAddCard(sendInvite); return; } // selling → card needed up front
         throw e;
       }
     });
 
   const acceptInvite = (token: string) =>
     run(async () => {
-      const { dealId } = await api.acceptInvite(session!.accessToken, token);
-      await loadHome();
-      openDeal(dealId);
+      const doAccept = async () => {
+        const { dealId } = await api.acceptInvite(session!.accessToken, token);
+        await loadHome();
+        openDeal(dealId);
+      };
+      try {
+        await doAccept();
+      } catch (e: any) {
+        if (e?.code !== 'card_required') throw e;
+        promptAddCard(doAccept); // accepting as the seller → card needed to seal terms
+      }
     });
   const declineInvite = (token: string) => run(async () => { await api.declineInvite(session!.accessToken, token); await loadHome(); });
 
@@ -313,16 +335,7 @@ function useAppState() {
         await doAct();
       } catch (e: any) {
         if (e?.code !== 'card_required') throw e;
-        // seller needs a card on file to accept — offer to add one and retry once
-        const deposit = formatMoney(deal?.commitmentCents ?? 500);
-        Alert.alert(
-          'Add a card to accept',
-          `You're only ever charged if you don't show up — a ${deposit} deposit hold is placed when you head out, released when the deal completes. (Test mode: a fake Visa is used.)`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Add card', onPress: () => run(async () => { await api.addPaymentMethod(bearer()); await doAct(); }) },
-          ]
-        );
+        promptAddCard(doAct, deal?.commitmentCents ?? 500);
       }
     });
 

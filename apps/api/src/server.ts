@@ -154,6 +154,11 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     if (me && requiresKyc(me.identityTier === 'id_verified', amountCents)) {
       return reply.code(400).send({ error: 'Verify your ID to set up deals over $500.', code: 'kyc_required' });
     }
+    // A seller-initiated invite seals the seller's terms the moment it's accepted,
+    // so the inviter must already have a card on file (they're the seller here).
+    if (inviterRole === 'seller' && !me?.hasCardOnFile) {
+      return reply.code(400).send({ error: "Add a card first — you're only ever charged if you don't show up.", code: 'card_required' });
+    }
     const digits = String(counterpartyPhone).replace(/[^\d]/g, '');
     if (me && me.phone.replace(/[^\d]/g, '').endsWith(digits)) return reply.code(400).send({ error: "That's your own number — invite the other person." });
     const invitee = (await deps.repo.getUserByPhone(digits)) ?? (await deps.repo.getUserByPhone(String(counterpartyPhone)));
@@ -229,7 +234,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     if (!uid) return reply.code(401).send({ error: 'auth required' });
     const token = (req.params as { token: string }).token;
     const r = await acceptInvite(deps.repo, { token, accepterUserId: uid }, deps.makeCtx());
-    if (!r.ok) return reply.code(409).send({ error: r.reason });
+    if (!r.ok) return reply.code(r.code === 'card_required' ? 400 : 409).send({ error: r.reason, code: r.code });
     const inv = await deps.repo.getInvite(token);
     if (inv) {
       const accepter = await deps.repo.getUser(uid);

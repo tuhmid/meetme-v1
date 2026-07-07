@@ -47,7 +47,7 @@ export function nextActions(deal: Deal, role: Role): Action[] {
 export function labelFor(a: Action, deal: Deal): string {
   switch (a.type) {
     case 'ACCEPT_TERMS': return 'Accept terms';
-    case 'FUND': return `Fund ${formatMoney(deal.amountCents + deal.commitmentCents)}`;
+    case 'FUND': return `Accept & fund ${formatMoney(deal.amountCents + deal.commitmentCents)}`;
     case 'HEAD_OUT': return "I'm heading out";
     case 'ARRIVE': return "I've arrived";
     case 'REVEAL_CODE': return 'Reveal release code';
