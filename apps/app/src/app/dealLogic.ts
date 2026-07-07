@@ -27,7 +27,13 @@ export function nextActions(deal: Deal, role: Role): Action[] {
   if (s === 'ARMED') return [{ type: 'HEAD_OUT', actor: role }];
   if (s === 'EN_ROUTE') {
     const arrived = role === 'buyer' ? deal.buyerArrived : deal.sellerArrived;
-    return arrived ? [] : [{ type: 'ARRIVE', party: role }];
+    if (arrived) return [];
+    // The second party still signals their own head-out (for the seller this is
+    // also what places the card hold) — arriving directly stays possible too.
+    const headedOut = role === 'buyer' ? deal.buyerHeadedOut : deal.sellerHeadedOut;
+    return headedOut
+      ? [{ type: 'ARRIVE', party: role }]
+      : [{ type: 'HEAD_OUT', actor: role }, { type: 'ARRIVE', party: role }];
   }
   if (s === 'AT_MEETUP' && role === 'buyer' && !deal.codeRevealed) return [{ type: 'REVEAL_CODE' }];
   if (s === 'CONFIRMING' && role === 'buyer') return [{ type: 'CONFIRM_RECEIVED' }];

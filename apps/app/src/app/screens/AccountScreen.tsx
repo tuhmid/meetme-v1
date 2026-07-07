@@ -87,7 +87,7 @@ export default function AccountScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <StatusBar style="dark" />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 6, paddingBottom: 34 }} keyboardShouldPersistTaps="handled">
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 6, paddingBottom: 90 }} keyboardShouldPersistTaps="handled">
         <Animated.View entering={enterSection(0)}>
           <SectionLabel style={{ marginTop: 6 }}>Account</SectionLabel>
           <Card>

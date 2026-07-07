@@ -49,7 +49,7 @@ export default function HomeScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 6, paddingBottom: 34 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 6, paddingBottom: 90 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {session ? (
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.colors.text, borderRadius: 10, padding: 10, marginBottom: 12 }}>
               <Text style={{ color: theme.colors.surface }}>Signed in as <Text style={{ fontWeight: '800' }}>{session.name}</Text></Text>
