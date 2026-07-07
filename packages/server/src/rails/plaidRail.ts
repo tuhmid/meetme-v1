@@ -103,5 +103,20 @@ export function makePlaidRail(cfg: PlaidRailConfig): PaymentRail {
       const resp = await client.transferGet({ transfer_id: transferId });
       return mapStatus((resp.data as any).transfer.status);
     },
+
+    // Card operations belong to a card adapter (Stripe SetupIntent + manual-capture
+    // PaymentIntent) — Plaid is bank rails only. Fail loudly if wired by mistake.
+    async validateCard(): Promise<{ ok: boolean; last4: string }> {
+      throw new Error('PlaidRail has no card support — use a card adapter (Stripe) for the seller commitment');
+    },
+    async holdCommitment(): Promise<{ holdId: string }> {
+      throw new Error('PlaidRail has no card support — use a card adapter (Stripe) for the seller commitment');
+    },
+    async captureHold(): Promise<{ ok: boolean }> {
+      throw new Error('PlaidRail has no card support — use a card adapter (Stripe) for the seller commitment');
+    },
+    async releaseHold(): Promise<void> {
+      throw new Error('PlaidRail has no card support — use a card adapter (Stripe) for the seller commitment');
+    },
   };
 }

@@ -122,7 +122,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const action = (req.body as { action?: Action }).action;
     if (!action) return reply.code(400).send({ error: 'action required' });
     const r = await executeAction(deps.repo, deps.rail, { dealId: id, action, callerUserId: uid, channel: 'user' }, deps.makeCtx());
-    if (!r.ok) return reply.code(409).send({ error: r.reason, code: r.code });
+    if (!r.ok) return reply.code(r.code === 'card_required' ? 400 : 409).send({ error: r.reason, code: r.code });
     void notifyDealState(deps.repo, push, r.deal); // best-effort push to both parties
     // Only the deal + (for the actor) the release code go back — not the raw ledger.
     return r.secret ? { ok: true, deal: r.deal, secret: r.secret } : { ok: true, deal: r.deal };
@@ -202,6 +202,18 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     if (inv.inviterId !== uid && !isInvitee) return reply.code(403).send({ error: 'not your invite' });
     await deps.repo.cancelInvite(inv.token);
     return { ok: true };
+  });
+
+  // Add a card on file ($0 validation) — required to accept a deal as the seller.
+  // FakeRail always validates; a real card rail runs a Stripe SetupIntent here.
+  app.post('/payment-method', async (req, reply) => {
+    const uid = await resolveCaller(req);
+    if (!uid) return reply.code(401).send({ error: 'auth required' });
+    if (!(await deps.repo.getUser(uid))) return reply.code(404).send({ error: 'unknown user' });
+    const v = await deps.rail.validateCard(uid);
+    if (!v.ok) return reply.code(400).send({ error: 'card validation failed', code: 'card_invalid' });
+    await deps.repo.setCardOnFile(uid, v.last4);
+    return { ok: true, last4: v.last4 };
   });
 
   // Mock ID verification — a licensed KYC partner does this for real. Bumps the tier.

@@ -34,8 +34,8 @@ function drive(deal: Deal, ctx: Ctx, actions: Action[]) {
 const HAPPY: Action[] = [
   { type: 'ACCEPT_TERMS' },
   { type: 'FUND' },
-  { type: 'POST_STAKE' },
   { type: 'HEAD_OUT', actor: 'buyer' },
+  { type: 'HEAD_OUT', actor: 'seller' },
   { type: 'ARRIVE', party: 'buyer' },
   { type: 'ARRIVE', party: 'seller' },
   { type: 'REVEAL_CODE' },
@@ -52,7 +52,7 @@ describe('happy path + money conservation', () => {
     expect(balanced(ledger)).toBe(true); // every txn sums to 0 → total conserved
     expect(balanceOf(ledger, escrowAcct('d1'))).toBe(0); // escrow fully drained
 
-    // $300 deal: fee tier = $4/side, commitment $5/side
+    // $300 deal: fee tier = $4/side, buyer commitment $5 (the seller never escrows one)
     expect(balanceOf(ledger, bankAcct('sam'))).toBe(300_00 - 4_00); // seller net +$296.00
     expect(balanceOf(ledger, bankAcct('maya'))).toBe(-(300_00 + 4_00)); // buyer net -$304.00
     expect(balanceOf(ledger, PLATFORM_FEES)).toBe(2 * 4_00); // $8 (both sides)
@@ -61,13 +61,25 @@ describe('happy path + money conservation', () => {
     const total = ledger.reduce((s, e) => s + e.amountCents, 0);
     expect(total).toBe(0);
 
+    // no seller commitment leg anywhere — their commitment was only ever a card hold
+    expect(ledger.some((e) => e.memo === 'stake' || e.memo === 'seller_refund')).toBe(false);
     expect(effects).toContainEqual({ type: 'deal_completed', userIds: ['maya', 'sam'] });
+    expect(effects).toContainEqual({ type: 'release_seller_hold' }); // seller headed out -> hold existed -> released
     expect(deal.releaseCodeHash).toBe('h:1234');
+  });
+
+  it('FUND arms the deal directly — no seller stake turn', () => {
+    const ctx = makeCtx();
+    const { deal, ledger } = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]);
+    expect(deal.state).toBe('ARMED');
+    expect(balanceOf(ledger, bankAcct('maya'))).toBe(-(300_00 + 4_00 + 5_00)); // price + fee + commitment
+    expect(balanceOf(ledger, escrowAcct('d1'))).toBe(300_00 + 4_00 + 5_00);
+    expect(balanceOf(ledger, bankAcct('sam'))).toBe(0); // seller pays nothing upfront
   });
 
   it('co-location gate: AT_MEETUP only after BOTH arrive', () => {
     const ctx = makeCtx();
-    const enRoute = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' }, { type: 'HEAD_OUT', actor: 'buyer' }]).deal;
+    const enRoute = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'buyer' }]).deal;
     const oneArrived = applyAction(enRoute, { type: 'ARRIVE', party: 'buyer' }, ctx);
     expect(oneArrived.ok && oneArrived.deal.state).toBe('EN_ROUTE'); // not yet
     const bothArrived = applyAction(oneArrived.ok ? oneArrived.deal : enRoute, { type: 'ARRIVE', party: 'seller' }, ctx);
@@ -75,49 +87,82 @@ describe('happy path + money conservation', () => {
   });
 });
 
-describe('no-show: commitment goes to the company', () => {
-  it('refunds the present party fully and forfeits the no-show $5 to platform', () => {
+describe('no-show: commitment goes to the stood-up party', () => {
+  it('seller no-show: buyer fully refunded AND collects the seller commitment off their card', () => {
     const ctx = makeCtx();
-    const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' }, { type: 'HEAD_OUT', actor: 'buyer' }, { type: 'ARRIVE', party: 'buyer' }]).deal;
+    const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'buyer' }, { type: 'ARRIVE', party: 'buyer' }]).deal;
     const r = applyAction(enRoute, { type: 'EXPIRE_NO_SHOW', noShow: 'seller' }, ctx);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.deal.state).toBe('EXPIRED_NO_SHOW');
     expect(r.deal.faultParty).toBe('seller');
     expect(balanced(r.ledger)).toBe(true);
-    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 4_00 + 5_00); // buyer gets price + prepaid fee + commitment back
-    expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(5_00); // seller's $5 commitment to the company
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 4_00 + 5_00 + 5_00); // full refund + the seller's captured commitment
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(-5_00); // collected off the seller's card
+    expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0); // the company keeps nothing
     expect(r.effects).toContainEqual({ type: 'trust_delta', userId: 'sam', delta: -6 });
+    expect(r.effects).toContainEqual({ type: 'capture_seller_commitment', toUserId: 'maya', amountCents: 5_00 });
+  });
+
+  it('buyer no-show: the buyer commitment pays the stood-up seller, price + fee return', () => {
+    const ctx = makeCtx();
+    const enRoute = drive(newDeal(300_00), ctx, [
+      { type: 'ACCEPT_TERMS' }, { type: 'FUND' },
+      { type: 'HEAD_OUT', actor: 'buyer' }, { type: 'HEAD_OUT', actor: 'seller' }, { type: 'ARRIVE', party: 'seller' },
+    ]).deal;
+    const r = applyAction(enRoute, { type: 'EXPIRE_NO_SHOW', noShow: 'buyer' }, ctx);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.deal.faultParty).toBe('buyer');
+    expect(balanced(r.ledger)).toBe(true);
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 4_00); // price + fee back, NOT the commitment
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(5_00); // the buyer's commitment, to the seller
+    expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0);
+    expect(r.effects).toContainEqual({ type: 'trust_delta', userId: 'maya', delta: -6 });
+    expect(r.effects).toContainEqual({ type: 'release_seller_hold' }); // seller headed out; their hold is let go
   });
 });
 
 describe('cancel / dispute split', () => {
   it('cancel after funding refunds the buyer, no fee', () => {
     const ctx = makeCtx();
-    const funded = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]).deal;
-    const r = applyAction(funded, { type: 'CANCEL', actor: 'buyer' }, ctx);
+    const armed = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]).deal;
+    const r = applyAction(armed, { type: 'CANCEL', actor: 'buyer' }, ctx);
     expect(r.ok && r.deal.state).toBe('REFUNDED');
     if (!r.ok) return;
     expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 4_00 + 5_00); // everything back
     expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(0);
   });
 
-  it('backing out AFTER heading out forfeits your commitment (self-declared no-show)', () => {
+  it('buyer backing out AFTER heading out forfeits their commitment to the seller', () => {
     const ctx = makeCtx();
-    const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' }, { type: 'HEAD_OUT', actor: 'buyer' }]).deal;
+    const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'buyer' }]).deal;
     const r = applyAction(enRoute, { type: 'CANCEL', actor: 'buyer' }, ctx);
     expect(r.ok && r.deal.state).toBe('EXPIRED_NO_SHOW');
     if (!r.ok) return;
     expect(r.deal.faultParty).toBe('buyer');
     expect(balanced(r.ledger)).toBe(true);
-    expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(5_00); // buyer's commitment forfeited to the company
+    expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0); // nothing to the company
     expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 4_00); // price + fee back, NOT the commitment
-    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(5_00); // seller's commitment returned
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(5_00); // the stood-up seller gets it
   });
 
-  it('dispute split halves the price, returns commitments, no fee', () => {
+  it('seller backing out AFTER heading out gets their card commitment captured for the buyer', () => {
     const ctx = makeCtx();
-    const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' }, { type: 'HEAD_OUT', actor: 'buyer' }]).deal;
+    const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'seller' }]).deal;
+    const r = applyAction(enRoute, { type: 'CANCEL', actor: 'seller' }, ctx);
+    expect(r.ok && r.deal.state).toBe('EXPIRED_NO_SHOW');
+    if (!r.ok) return;
+    expect(r.deal.faultParty).toBe('seller');
+    expect(balanced(r.ledger)).toBe(true);
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 4_00 + 5_00 + 5_00); // made whole + compensation
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(-5_00);
+    expect(r.effects).toContainEqual({ type: 'capture_seller_commitment', toUserId: 'maya', amountCents: 5_00 });
+  });
+
+  it('dispute split halves the price, returns the buyer commitment, releases the hold, no fee', () => {
+    const ctx = makeCtx();
+    const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'seller' }]).deal;
     const disputed = applyAction(enRoute, { type: 'OPEN_DISPUTE', actor: 'buyer' }, ctx);
     expect(disputed.ok && disputed.deal.state).toBe('DISPUTED');
     if (!disputed.ok) return;
@@ -126,13 +171,14 @@ describe('cancel / dispute split', () => {
     if (!r.ok) return;
     expect(balanced(r.ledger)).toBe(true);
     expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(150_00 + 4_00 + 5_00); // half price + prepaid fee + commitment
-    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(150_00 + 5_00); // half price + commitment
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(150_00); // half price (their commitment was never in escrow)
     expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(0);
+    expect(r.effects).toContainEqual({ type: 'release_seller_hold' }); // disputes never capture the hold
   });
 
   it('records positions and emits dispute effects (open → statement → resolve)', () => {
     const ctx = makeCtx();
-    const armed = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' }]).deal;
+    const armed = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]).deal;
 
     const opened = applyAction(armed, { type: 'OPEN_DISPUTE', actor: 'buyer' }, ctx);
     expect(opened.ok && opened.deal.state).toBe('DISPUTED');
@@ -154,7 +200,7 @@ describe('cancel / dispute split', () => {
 
   it('self-service: matching proposals auto-resolve by agreement (no fault); mismatched just record', () => {
     const ctx = makeCtx();
-    const disputed = applyAction(drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' }]).deal, { type: 'OPEN_DISPUTE', actor: 'buyer' }, ctx);
+    const disputed = applyAction(drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]).deal, { type: 'OPEN_DISPUTE', actor: 'buyer' }, ctx);
     expect(disputed.ok).toBe(true);
     if (!disputed.ok) return;
 
@@ -186,20 +232,20 @@ describe('guard invariant (carryover bug class)', () => {
   });
 
   it('cannot reach RELEASED without passing AT_MEETUP', () => {
-    const armed = drive(newDeal(), makeCtx(), [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' }]).deal;
+    const armed = drive(newDeal(), makeCtx(), [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]).deal;
     const r = applyAction(armed, { type: 'CONFIRM_RECEIVED' }, ctx);
     expect(r.ok).toBe(false); // and so no deal_completed effect is produced
   });
 
   it('cannot ARRIVE before EN_ROUTE (no no-show-from-ARMED exploit)', () => {
-    const armed = drive(newDeal(), makeCtx(), [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' }]).deal;
+    const armed = drive(newDeal(), makeCtx(), [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]).deal;
     const r = applyAction(armed, { type: 'ARRIVE', party: 'buyer' }, ctx);
     expect(r.ok).toBe(false);
   });
 
   it('rejects a wrong release code', () => {
     const atMeetup = drive(newDeal(), makeCtx(), [
-      { type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' },
+      { type: 'ACCEPT_TERMS' }, { type: 'FUND' },
       { type: 'HEAD_OUT', actor: 'buyer' }, { type: 'ARRIVE', party: 'buyer' }, { type: 'ARRIVE', party: 'seller' },
     ]).deal;
     const r = applyAction(atMeetup, { type: 'ENTER_CODE', code: '0000' }, ctx);
@@ -213,17 +259,15 @@ describe('guard invariant (carryover bug class)', () => {
 });
 
 describe('release code is minted at reveal (buyer-only delivery)', () => {
-  it('POST_STAKE carries NO code; REVEAL_CODE returns the plaintext to the buyer', () => {
+  it('FUND carries NO code; REVEAL_CODE returns the plaintext to the buyer', () => {
     const ctx = makeCtx();
-    const funded = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]).deal;
+    const funded = applyAction(drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }]).deal, { type: 'FUND' }, ctx);
+    expect(funded.ok).toBe(true);
+    if (!funded.ok) return;
+    expect(funded.secret).toBeUndefined(); // nobody receives a code at funding
+    expect(funded.deal.releaseCodeHash).toBeNull(); // nothing minted yet
 
-    const staked = applyAction(funded, { type: 'POST_STAKE' }, ctx);
-    expect(staked.ok).toBe(true);
-    if (!staked.ok) return;
-    expect(staked.secret).toBeUndefined(); // the seller never receives the code
-    expect(staked.deal.releaseCodeHash).toBeNull(); // nothing minted yet
-
-    const atMeetup = drive(staked.deal, ctx, [
+    const atMeetup = drive(funded.deal, ctx, [
       { type: 'HEAD_OUT', actor: 'buyer' }, { type: 'ARRIVE', party: 'buyer' }, { type: 'ARRIVE', party: 'seller' },
     ]).deal;
     const revealed = applyAction(atMeetup, { type: 'REVEAL_CODE' }, ctx);
@@ -236,7 +280,7 @@ describe('release code is minted at reveal (buyer-only delivery)', () => {
   it('ENTER_CODE before the buyer reveals is rejected', () => {
     const ctx = makeCtx();
     const atMeetup = drive(newDeal(), ctx, [
-      { type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' },
+      { type: 'ACCEPT_TERMS' }, { type: 'FUND' },
       { type: 'HEAD_OUT', actor: 'buyer' }, { type: 'ARRIVE', party: 'buyer' }, { type: 'ARRIVE', party: 'seller' },
     ]).deal;
     const r = applyAction(atMeetup, { type: 'ENTER_CODE', code: '1234' }, ctx);
@@ -247,7 +291,7 @@ describe('release code is minted at reveal (buyer-only delivery)', () => {
 describe('CO_LOCATED (server geofence)', () => {
   it('marks both arrived and unlocks AT_MEETUP from EN_ROUTE', () => {
     const ctx = makeCtx();
-    const enRoute = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' }, { type: 'HEAD_OUT', actor: 'buyer' }]).deal;
+    const enRoute = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'buyer' }]).deal;
     const r = applyAction(enRoute, { type: 'CO_LOCATED' }, ctx);
     expect(r.ok && r.deal.state).toBe('AT_MEETUP');
     if (!r.ok) return;
@@ -260,10 +304,10 @@ describe('CO_LOCATED (server geofence)', () => {
   });
 });
 
-describe('HEAD_OUT presence (who is heading over)', () => {
+describe('HEAD_OUT presence + the seller commitment hold', () => {
   it('first head-out moves to EN_ROUTE and flags that party; the other can also head out', () => {
     const ctx = makeCtx();
-    const armed = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' }]).deal;
+    const armed = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]).deal;
 
     const r1 = applyAction(armed, { type: 'HEAD_OUT', actor: 'buyer' }, ctx);
     expect(r1.ok).toBe(true);
@@ -271,19 +315,34 @@ describe('HEAD_OUT presence (who is heading over)', () => {
     expect(r1.deal.state).toBe('EN_ROUTE');
     expect(r1.deal.buyerHeadedOut).toBe(true);
     expect(r1.deal.sellerHeadedOut).toBe(false);
+    expect(r1.effects).toEqual([]); // buyer heading out places no hold
 
     const r2 = applyAction(r1.deal, { type: 'HEAD_OUT', actor: 'seller' }, ctx);
     expect(r2.ok).toBe(true);
     if (!r2.ok) return;
     expect(r2.deal.state).toBe('EN_ROUTE'); // no state change on the second
     expect(r2.deal.sellerHeadedOut).toBe(true);
+    // the seller's head-out places the commitment hold on their card
+    expect(r2.effects).toContainEqual({ type: 'hold_seller_commitment', sellerId: 'sam', amountCents: 5_00 });
+
+    const again = applyAction(r2.deal, { type: 'HEAD_OUT', actor: 'seller' }, ctx);
+    expect(again.ok && again.effects).toEqual([]); // never double-holds
+  });
+
+  it('seller heading out FIRST also places the hold (with the EN_ROUTE transition)', () => {
+    const ctx = makeCtx();
+    const armed = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]).deal;
+    const r = applyAction(armed, { type: 'HEAD_OUT', actor: 'seller' }, ctx);
+    expect(r.ok && r.deal.state).toBe('EN_ROUTE');
+    if (!r.ok) return;
+    expect(r.effects).toContainEqual({ type: 'hold_seller_commitment', sellerId: 'sam', amountCents: 5_00 });
   });
 });
 
 describe('meetup spot', () => {
   it('sets the meetup before heading out, rejects empty name and once EN_ROUTE', () => {
     const ctx = makeCtx();
-    const armed = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'POST_STAKE' }]).deal;
+    const armed = drive(newDeal(), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]).deal;
     const r = applyAction(armed, { type: 'SET_MEETUP', actor: 'buyer', name: 'Eastside Police Station', lat: 40.71, lng: -74.01, custom: false }, ctx);
     expect(r.ok).toBe(true);
     if (!r.ok) return;

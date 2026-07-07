@@ -144,6 +144,16 @@ export class MemoryRepo implements Repo {
     if (u) { u.identityTier = tier; u.kycStatus = status; }
   }
 
+  async setCardOnFile(userId: string, last4: string): Promise<void> {
+    const u = this.users.get(userId);
+    if (u) { u.hasCardOnFile = true; u.cardLast4 = last4; }
+  }
+
+  async setSellerHold(dealId: string, holdId: string | null): Promise<void> {
+    const r = this.deals.get(dealId);
+    if (r) r.deal.sellerHoldId = holdId;
+  }
+
   messages: Array<{ dealId: string; senderId: string; body: string; createdAt: number }> = [];
   async addMessage(dealId: string, senderId: string, body: string): Promise<void> {
     this.messages.push({ dealId, senderId, body, createdAt: this.clock() });

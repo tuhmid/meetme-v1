@@ -6,6 +6,14 @@ whenever we take a shortcut. (Also mirrored in project memory.)
 ## Money (biggest one)
 - **FakeRail only** — all money movement is simulated in-code (funding, RTP-instant
   settle, payout, refund). No real Plaid/Stripe. `PlaidRail` is a scaffold.
+- **Card on file / seller commitment is a FakeRail stub** — `POST /payment-method`
+  "validates" a card ($0 auth) and always returns last4 `4242`; the hold placed at
+  the seller's head-out, the capture on a no-show, and the release on completion are
+  all in-memory. Real rail: **Stripe SetupIntent** (save the card) + a
+  **manual-capture PaymentIntent** (the hold). Real-rails considerations: card auth
+  holds **expire after ~7 days** (re-auth or place the hold closer to the meetup),
+  captures can be disputed/charged back, and a failed collection currently means the
+  company absorbs + a trust nuke (an account **ban** on collection failure is deferred).
 - **Money stays test-mode** until a fintech/MSB attorney signs off (never custody
   funds directly; use a licensed partner). Real rails = a later milestone.
 

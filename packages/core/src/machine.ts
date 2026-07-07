@@ -14,7 +14,6 @@ import { computeCommitmentCents, computeFeeCents, usd, type Cents } from './mone
 import { canTransition, type DealState } from './states';
 import {
   PLATFORM_FEES,
-  PLATFORM_PENALTY,
   bankAcct,
   entry,
   escrowAcct,
@@ -57,6 +56,7 @@ export function createDeal(input: {
     meetupLat: null,
     meetupLng: null,
     meetupCustom: false,
+    sellerHoldId: null,
     faultParty: null,
     resolutionNote: null,
     disputePositions: [],
@@ -73,7 +73,7 @@ function releaseLedger(deal: Deal, ctx: Ctx): LedgerEntry[] {
   const txn = ctx.newTxnId();
   return nonZero([
     entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'release'),
-    entry(txn, bankAcct(deal.sellerId), h.amount - fee + h.sellerCommitment, deal.id, 'seller_payout'),
+    entry(txn, bankAcct(deal.sellerId), h.amount - fee, deal.id, 'seller_payout'),
     entry(txn, bankAcct(deal.buyerId), h.buyerCommitment, deal.id, 'buyer_commitment_return'),
     entry(txn, PLATFORM_FEES, h.buyerFee + fee, deal.id, 'fees'),
   ]);
@@ -85,7 +85,6 @@ function refundAllLedger(deal: Deal, ctx: Ctx): LedgerEntry[] {
   return nonZero([
     entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'refund'),
     entry(txn, bankAcct(deal.buyerId), h.amount + h.buyerFee + h.buyerCommitment, deal.id, 'buyer_refund'),
-    entry(txn, bankAcct(deal.sellerId), h.sellerCommitment, deal.id, 'seller_refund'),
   ]);
 }
 
@@ -97,7 +96,7 @@ function splitLedger(deal: Deal, ctx: Ctx): LedgerEntry[] {
   return nonZero([
     entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'split'),
     entry(txn, bankAcct(deal.buyerId), buyerHalf + h.buyerFee + h.buyerCommitment, deal.id, 'buyer_split'),
-    entry(txn, bankAcct(deal.sellerId), sellerHalf + h.sellerCommitment, deal.id, 'seller_split'),
+    entry(txn, bankAcct(deal.sellerId), sellerHalf, deal.id, 'seller_split'),
   ]);
 }
 
@@ -105,21 +104,37 @@ function noShowLedger(deal: Deal, noShow: Role, ctx: Ctx): LedgerEntry[] {
   const h = escrowHeld(deal);
   const txn = ctx.newTxnId();
   if (noShow === 'seller') {
-    // buyer fully refunded; seller's commitment forfeited to the company
+    // buyer fully refunded from escrow; the seller's commitment is collected off
+    // their card and routed to the buyer. The capture is its own zero-sum txn —
+    // that money was never in escrow, it moves seller bank -> buyer bank.
+    const capture = ctx.newTxnId();
     return nonZero([
       entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'no_show'),
       entry(txn, bankAcct(deal.buyerId), h.amount + h.buyerFee + h.buyerCommitment, deal.id, 'present_refund'),
-      entry(txn, PLATFORM_PENALTY, h.sellerCommitment, deal.id, 'no_show_penalty'),
+      entry(capture, bankAcct(deal.sellerId), -deal.commitmentCents, deal.id, 'commitment_capture'),
+      entry(capture, bankAcct(deal.buyerId), deal.commitmentCents, deal.id, 'stood_up_compensation'),
     ]);
   }
-  // buyer no-show: price + prepaid fee returns, commitment forfeited; seller refunded
+  // buyer no-show: price + prepaid fee return; the buyer's escrowed commitment
+  // goes to the stood-up seller, not the company
   return nonZero([
     entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'no_show'),
     entry(txn, bankAcct(deal.buyerId), h.amount + h.buyerFee, deal.id, 'price_return'),
-    entry(txn, bankAcct(deal.sellerId), h.sellerCommitment, deal.id, 'present_refund'),
-    entry(txn, PLATFORM_PENALTY, h.buyerCommitment, deal.id, 'no_show_penalty'),
+    entry(txn, bankAcct(deal.sellerId), h.buyerCommitment, deal.id, 'stood_up_compensation'),
   ]);
 }
+
+/** Trust + rail effects for a no-show / back-out after heading out. Seller fault
+ *  captures their card hold (to the buyer); buyer fault releases any seller hold. */
+function faultEffects(deal: Deal, atFault: Role): SideEffect[] {
+  const effects: SideEffect[] = [{ type: 'trust_delta', userId: userId(deal, atFault), delta: -6 }];
+  if (atFault === 'seller') effects.push({ type: 'capture_seller_commitment', toUserId: deal.buyerId, amountCents: deal.commitmentCents });
+  else effects.push(...holdRelease(deal));
+  return effects;
+}
+
+/** A hold can exist only once the seller has headed out; release it on any non-capture ending. */
+const holdRelease = (deal: Deal): SideEffect[] => (deal.sellerHeadedOut ? [{ type: 'release_seller_hold' }] : []);
 
 
 // --- helpers to assemble results -------------------------------------------
@@ -147,8 +162,8 @@ function transition(
 }
 
 /** A field mutation with NO state change (still guarded on current state). */
-function mutate(deal: Deal, patch: Partial<Deal>, event: DealEvent): ApplyResult {
-  return { ok: true, deal: { ...deal, ...patch }, events: [event], ledger: [], effects: [] };
+function mutate(deal: Deal, patch: Partial<Deal>, event: DealEvent, effects: SideEffect[] = []): ApplyResult {
+  return { ok: true, deal: { ...deal, ...patch }, events: [event], ledger: [], effects };
 }
 
 /** Shared dispute resolution — used by admin RESOLVE_DISPUTE and by mutual agreement.
@@ -158,7 +173,8 @@ function resolveDispute(deal: Deal, outcome: 'release' | 'refund' | 'split', ctx
   const base = outcome === 'release' ? 'released to seller' : outcome === 'refund' ? 'refunded to buyer' : 'price split 50/50';
   const note = byAgreement ? `Resolved by agreement — ${base}.` : `Resolved: ${base}.`;
   const ledger = outcome === 'release' ? releaseLedger(deal, ctx) : outcome === 'refund' ? refundAllLedger(deal, ctx) : splitLedger(deal, ctx);
-  const effects: SideEffect[] = [{ type: 'dispute_resolved', outcome }];
+  // dispute endings never capture the seller's commitment — any hold is released
+  const effects: SideEffect[] = [{ type: 'dispute_resolved', outcome }, ...holdRelease(deal)];
   if (outcome === 'release') effects.push({ type: 'deal_completed', userIds: [deal.buyerId, deal.sellerId] });
   if (fault && !byAgreement) effects.push({ type: 'trust_delta', userId: userId(deal, fault), delta: -8 });
   return transition(deal, 'DISPUTE_RESOLVED', ev(ctx, 'system', 'resolved', note), {
@@ -176,26 +192,15 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
       return transition(deal, 'AGREED', ev(ctx, 'seller', 'accepted', 'Terms accepted.'));
 
     case 'FUND': {
+      // The buyer's money arms the deal directly — there is no seller stake turn.
+      // The seller's commitment is a card hold placed when they head out (HEAD_OUT).
       const total = deal.amountCents + deal.feeCentsPerSide + deal.commitmentCents;
       const txn = ctx.newTxnId();
       const ledger = nonZero([
         entry(txn, bankAcct(deal.buyerId), -total, deal.id, 'fund'),
         entry(txn, escrowAcct(deal.id), total, deal.id, 'fund'),
       ]);
-      return transition(deal, 'FUNDED', ev(ctx, 'buyer', 'funded', `Funded ${usd(total)} into escrow.`), { ledger });
-    }
-
-    case 'POST_STAKE': {
-      if (deal.state !== 'FUNDED') return reject(`illegal transition ${deal.state} -> ARMED`);
-      const txn = ctx.newTxnId();
-      const ledger = nonZero([
-        entry(txn, bankAcct(deal.sellerId), -deal.commitmentCents, deal.id, 'stake'),
-        entry(txn, escrowAcct(deal.id), deal.commitmentCents, deal.id, 'stake'),
-      ]);
-      // NB: the release code is NOT minted here. It's generated at REVEAL_CODE (a
-      // buyer action) so the plaintext only ever reaches the buyer — the seller
-      // learns it in person, which is exactly what proves the handoff happened.
-      return transition(deal, 'ARMED', ev(ctx, 'seller', 'staked', `Posted ${usd(deal.commitmentCents)} commitment.`), { ledger });
+      return transition(deal, 'ARMED', ev(ctx, 'buyer', 'funded', `Funded ${usd(total)} into escrow — deal armed; no seller stake needed.`), { ledger });
     }
 
     case 'SET_MEETUP': {
@@ -212,11 +217,16 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
     case 'HEAD_OUT': {
       // Track WHO headed out so the other phone can show "they're heading over".
       // First head-out moves ARMED -> EN_ROUTE; the second party heading out just
-      // flips their flag (no state change).
+      // flips their flag (no state change). The seller's FIRST head-out places the
+      // commitment hold on their card — captured only if they then no-show/back out.
       const patch: Partial<Deal> = action.actor === 'buyer' ? { buyerHeadedOut: true } : { sellerHeadedOut: true };
       const event = ev(ctx, action.actor, 'heading_out', `${action.actor} is heading to the meetup.`);
-      if (deal.state === 'ARMED') return transition({ ...deal, ...patch }, 'EN_ROUTE', event, { patch });
-      if (deal.state === 'EN_ROUTE') return mutate(deal, patch, event);
+      const effects: SideEffect[] =
+        action.actor === 'seller' && !deal.sellerHeadedOut
+          ? [{ type: 'hold_seller_commitment', sellerId: deal.sellerId, amountCents: deal.commitmentCents }]
+          : [];
+      if (deal.state === 'ARMED') return transition({ ...deal, ...patch }, 'EN_ROUTE', event, { patch, effects });
+      if (deal.state === 'EN_ROUTE') return mutate(deal, patch, event, effects);
       return reject(`cannot head out from ${deal.state}`);
     }
 
@@ -270,7 +280,7 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
     case 'CONFIRM_RECEIVED':
     case 'AUTO_RELEASE': {
       const auto = action.type === 'AUTO_RELEASE';
-      const effects: SideEffect[] = [{ type: 'deal_completed', userIds: [deal.buyerId, deal.sellerId] }];
+      const effects: SideEffect[] = [{ type: 'deal_completed', userIds: [deal.buyerId, deal.sellerId] }, ...holdRelease(deal)];
       return transition(deal, 'RELEASED', ev(ctx, auto ? 'system' : 'buyer', auto ? 'auto_released' : 'released', auto ? 'Auto-released after the confirm window.' : 'Handoff confirmed; funds released.'), {
         ledger: releaseLedger(deal, ctx),
         effects,
@@ -326,13 +336,13 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
           ledger: refundAllLedger(deal, ctx),
         });
       }
-      // Once you've headed out, backing out is a no-show: you forfeit your commitment,
-      // the other side is made whole (same as EXPIRE_NO_SHOW, but self-declared).
+      // Once you've headed out, backing out is a no-show: you forfeit your commitment
+      // to the other side, who is made whole (same as EXPIRE_NO_SHOW, but self-declared).
       if (deal.state === 'EN_ROUTE') {
-        const note = `${action.actor} backed out after heading out and forfeited their commitment.`;
+        const note = `${action.actor} backed out after heading out and forfeited their commitment to the other party.`;
         return transition(deal, 'EXPIRED_NO_SHOW', ev(ctx, action.actor, 'backed_out', note), {
           ledger: noShowLedger(deal, action.actor, ctx),
-          effects: [{ type: 'trust_delta', userId: userId(deal, action.actor), delta: -6 }],
+          effects: faultEffects(deal, action.actor),
           patch: { faultParty: action.actor, resolutionNote: note },
         });
       }
@@ -341,10 +351,10 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
 
     case 'EXPIRE_NO_SHOW': {
       const present = otherRole(action.noShow);
-      const note = `${action.noShow} never arrived. ${present} fully refunded; the no-show's commitment went to MeetMe.`;
+      const note = `${action.noShow} never arrived. ${present} fully refunded; the no-show's commitment went to the ${present}.`;
       return transition(deal, 'EXPIRED_NO_SHOW', ev(ctx, 'system', 'no_show', note), {
         ledger: noShowLedger(deal, action.noShow, ctx),
-        effects: [{ type: 'trust_delta', userId: userId(deal, action.noShow), delta: -6 }],
+        effects: faultEffects(deal, action.noShow),
         patch: { faultParty: action.noShow, resolutionNote: note },
       });
     }

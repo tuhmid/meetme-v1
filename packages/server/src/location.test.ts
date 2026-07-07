@@ -15,13 +15,13 @@ async function enRouteDeal() {
   const b = await signup(repo, { phone: `+1555${Math.random()}`, name: 'Maya', isVoip: false }, ctx);
   const s = await signup(repo, { phone: `+1666${Math.random()}`, name: 'Sam', isVoip: false }, ctx);
   if (!b.ok || !s.ok) throw new Error('signup');
+  await repo.setCardOnFile(s.user.id, '4242'); // sellers need a card on file to accept
   const created = await createDealHandler(repo, { creatorUserId: b.user.id, counterpartyUserId: s.user.id, itemDescription: 'x', amountCents: 300_00 }, ctx);
   if (!created.ok) throw new Error('create');
   const dealId = created.deal.id;
   const exec = (id: string, a: Action) => executeAction(repo, rail, { dealId, action: a, callerUserId: id, channel: 'user' }, ctx);
   await exec(s.user.id, { type: 'ACCEPT_TERMS' });
-  await exec(b.user.id, { type: 'FUND' });
-  await exec(s.user.id, { type: 'POST_STAKE' });
+  await exec(b.user.id, { type: 'FUND' }); // arms the deal directly
   await exec(b.user.id, { type: 'HEAD_OUT', actor: 'buyer' });
   return { repo, ctx, rail, buyer: b.user, seller: s.user, dealId };
 }

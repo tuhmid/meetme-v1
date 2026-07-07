@@ -25,6 +25,8 @@ export function makeSupabaseRepo(url: string, serviceRoleKey: string): Repo {
     trustScore: r.trust_score,
     completedDeals: r.completed_deals,
     acceptedTermsAt: r.accepted_terms_at ? Date.parse(r.accepted_terms_at) : null,
+    hasCardOnFile: !!r.has_card_on_file,
+    cardLast4: r.card_last4 ?? null,
   });
 
   const rowToDeal = (r: Record<string, any>, ratings: { buyer?: number; seller?: number }, disputePositions: Deal['disputePositions'] = [], disputeProposals: Deal['disputeProposals'] = {}): Deal => ({
@@ -47,6 +49,7 @@ export function makeSupabaseRepo(url: string, serviceRoleKey: string): Repo {
     meetupLat: r.meetup_lat != null ? Number(r.meetup_lat) : null,
     meetupLng: r.meetup_lng != null ? Number(r.meetup_lng) : null,
     meetupCustom: !!r.meetup_custom,
+    sellerHoldId: r.seller_hold_id ?? null,
     faultParty: r.fault_party,
     resolutionNote: r.resolution_note,
     disputePositions,
@@ -142,6 +145,8 @@ export function makeSupabaseRepo(url: string, serviceRoleKey: string): Repo {
         trust_score: user.trustScore,
         completed_deals: user.completedDeals,
         accepted_terms_at: user.acceptedTermsAt ? new Date(user.acceptedTermsAt).toISOString() : null,
+        has_card_on_file: user.hasCardOnFile,
+        card_last4: user.cardLast4,
       });
       if (error) throw error;
     },
@@ -264,6 +269,16 @@ export function makeSupabaseRepo(url: string, serviceRoleKey: string): Repo {
 
     async setKyc(id: string, tier: 'phone' | 'id_verified', status: 'none' | 'pending' | 'verified' | 'rejected'): Promise<void> {
       const { error } = await db.from('users').update({ identity_tier: tier, kyc_status: status }).eq('id', id);
+      if (error) throw error;
+    },
+
+    async setCardOnFile(userId: string, last4: string): Promise<void> {
+      const { error } = await db.from('users').update({ has_card_on_file: true, card_last4: last4 }).eq('id', userId);
+      if (error) throw error;
+    },
+
+    async setSellerHold(dealId: string, holdId: string | null): Promise<void> {
+      const { error } = await db.from('deals').update({ seller_hold_id: holdId }).eq('id', dealId);
       if (error) throw error;
     },
 

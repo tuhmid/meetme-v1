@@ -1,4 +1,4 @@
-import { applyAction, createDeal, requiresKyc, usd, MIN_DEAL_CENTS, PHONE_TIER_MAX_CENTS, type Action, type Deal, type LedgerEntry, type Role, type UseCase } from '@meetme/core';
+import { applyAction, createDeal, requiresKyc, usd, MIN_DEAL_CENTS, PHONE_TIER_MAX_CENTS, type Action, type Deal, type LedgerEntry, type Role, type SideEffect, type UseCase } from '@meetme/core';
 import { authorize, type Channel } from './authz';
 import type { ServerCtx } from './ctx';
 import { ConflictError, type Repo } from './repo';
@@ -17,8 +17,8 @@ export interface ActionRequest {
 }
 
 export type HandlerResult =
-  | { ok: false; code: 'not_found' | 'forbidden' | 'rejected' | 'conflict'; reason: string }
-  | { ok: true; deal: Deal; ledger: LedgerEntry[]; secret?: { releaseCode: string } };
+  | { ok: false; code: 'not_found' | 'forbidden' | 'rejected' | 'conflict' | 'card_required'; reason: string }
+  | { ok: true; deal: Deal; ledger: LedgerEntry[]; effects: SideEffect[]; secret?: { releaseCode: string } };
 
 /**
  * The one server entry point for mutating a deal. Order matters:
@@ -32,6 +32,15 @@ export async function handleAction(repo: Repo, req: ActionRequest, ctx: ServerCt
 
   const az = authorize(req.action, roleOf(rec.deal, req.callerUserId), req.channel);
   if (!az.ok) return { ok: false, code: 'forbidden', reason: az.reason };
+
+  // Card-on-file gate: the seller's commitment is guaranteed by a card, so they
+  // can't take on a deal without one (authorize already made this the seller).
+  if (req.action.type === 'ACCEPT_TERMS' && req.callerUserId !== null) {
+    const caller = await repo.getUser(req.callerUserId);
+    if (!caller?.hasCardOnFile) {
+      return { ok: false, code: 'card_required', reason: "Add a card first — you're only ever charged if you don't show up." };
+    }
+  }
 
   const result = applyAction(rec.deal, req.action, ctx);
   if (!result.ok) return { ok: false, code: 'rejected', reason: result.reason };
@@ -49,8 +58,8 @@ export async function handleAction(repo: Repo, req: ActionRequest, ctx: ServerCt
   }
 
   return result.secret
-    ? { ok: true, deal: result.deal, ledger: result.ledger, secret: result.secret }
-    : { ok: true, deal: result.deal, ledger: result.ledger };
+    ? { ok: true, deal: result.deal, ledger: result.ledger, effects: result.effects, secret: result.secret }
+    : { ok: true, deal: result.deal, ledger: result.ledger, effects: result.effects };
 }
 
 export type CreateDealResult = { ok: true; deal: Deal } | { ok: false; code: 'forbidden' | 'invalid' | 'kyc_required'; reason: string };

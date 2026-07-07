@@ -32,6 +32,14 @@ export interface PaymentRail {
   initiatePayout(i: TransferIntent): Promise<TransferResult>;
   initiateRefund(i: TransferIntent): Promise<TransferResult>;
   getStatus(transferId: string): Promise<TransferStatus>;
+
+  // Card-on-file commitment (seller side). $0 validation at accept; an auth hold
+  // when the seller heads out; capture only on a no-show. Stripe SetupIntent +
+  // manual-capture PaymentIntent in a real card adapter.
+  validateCard(userId: string): Promise<{ ok: boolean; last4: string }>;
+  holdCommitment(userId: string, amountCents: number): Promise<{ holdId: string }>;
+  captureHold(holdId: string): Promise<{ ok: boolean }>;
+  releaseHold(holdId: string): Promise<void>;
 }
 
 /** Funding with a Signal risk score at or above this is declined up front. */

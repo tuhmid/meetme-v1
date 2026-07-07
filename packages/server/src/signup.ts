@@ -23,6 +23,8 @@ export async function signup(repo: Repo, input: { phone: string; name: string; i
     trustScore: 50,
     completedDeals: 0,
     acceptedTermsAt: ctx.now, // signup includes accepting the terms / prohibited-items policy
+    hasCardOnFile: false, // added later via POST /payment-method (required to sell)
+    cardLast4: null,
   };
   await repo.addUser(user);
   return { ok: true, user };

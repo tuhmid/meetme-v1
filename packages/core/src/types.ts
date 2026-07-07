@@ -35,6 +35,7 @@ export interface Deal {
   meetupLat: number | null;
   meetupLng: number | null;
   meetupCustom: boolean; // true = user-entered (not a verified safe spot)
+  sellerHoldId: string | null; // card hold on the seller's commitment; set by the server after the rail places it
   faultParty: Role | null;
   resolutionNote: string | null;
   disputePositions: DisputePosition[];
@@ -61,7 +62,8 @@ export interface LedgerEntry {
   memo: string;
 }
 
-/** Effects the server applies to user records / side tables (kept out of the deal/ledger). */
+/** Effects the server applies to user records / side tables (kept out of the deal/ledger).
+ *  The hold/capture/release trio drives the seller's card commitment on the payment rail. */
 export type SideEffect =
   | { type: 'deal_completed'; userIds: [string, string] }
   | { type: 'trust_delta'; userId: string; delta: number }
@@ -69,7 +71,10 @@ export type SideEffect =
   | { type: 'dispute_opened'; byUserId: string }
   | { type: 'dispute_position'; userId: string; actor: Role; text: string }
   | { type: 'dispute_proposal'; actor: Role; outcome: DisputeOutcome }
-  | { type: 'dispute_resolved'; outcome: DisputeOutcome };
+  | { type: 'dispute_resolved'; outcome: DisputeOutcome }
+  | { type: 'hold_seller_commitment'; sellerId: string; amountCents: number }
+  | { type: 'capture_seller_commitment'; toUserId: string; amountCents: number }
+  | { type: 'release_seller_hold' };
 
 /**
  * Injected, side-effect-free context so the machine stays pure & deterministic
@@ -85,7 +90,6 @@ export interface Ctx {
 export type Action =
   | { type: 'ACCEPT_TERMS' }
   | { type: 'FUND' }
-  | { type: 'POST_STAKE' }
   | { type: 'HEAD_OUT'; actor: Role }
   | { type: 'ARRIVE'; party: Role }
   | { type: 'CO_LOCATED' } // system: both phones detected together at the meetup

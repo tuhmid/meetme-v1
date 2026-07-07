@@ -8,7 +8,7 @@ const OK: Authz = { ok: true };
 const no = (reason: string): Authz => ({ ok: false, reason });
 
 const BUYER_ONLY = new Set(['FUND', 'REVEAL_CODE', 'CONFIRM_RECEIVED']);
-const SELLER_ONLY = new Set(['ACCEPT_TERMS', 'POST_STAKE', 'ENTER_CODE']);
+const SELLER_ONLY = new Set(['ACCEPT_TERMS', 'ENTER_CODE']);
 
 /**
  * The core validates WHEN an action is legal (state machine). This validates WHO

@@ -6,8 +6,7 @@ import type { Repo } from './repo';
 // shows only what's relevant); the in-app banner covers the rest. Best-effort.
 const MESSAGES: Record<string, { title: string; body: string }> = {
   AGREED: { title: 'Terms accepted', body: 'Your counterparty accepted — fund the deal to continue.' },
-  FUNDED: { title: 'Funded', body: 'The buyer funded escrow — post your commitment.' },
-  ARMED: { title: 'Ready to meet', body: 'Both sides are staked. Head to the meetup spot.' },
+  ARMED: { title: 'Ready to meet', body: 'The deal is funded and armed. Head to the meetup spot.' },
   EN_ROUTE: { title: 'On the way', body: 'Your counterparty is heading to the meetup.' },
   AT_MEETUP: { title: 'You are both here', body: 'Reveal and enter the release code to finish.' },
   CONFIRMING: { title: 'Almost done', body: 'Release code verified — confirm you received the item.' },

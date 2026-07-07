@@ -13,6 +13,7 @@ async function setup() {
   const b = await signup(repo, { phone: `+1555${Math.random()}`, name: 'Maya', isVoip: false }, ctx);
   const s = await signup(repo, { phone: `+1666${Math.random()}`, name: 'Sam', isVoip: false }, ctx);
   if (!b.ok || !s.ok) throw new Error('signup');
+  await repo.setCardOnFile(s.user.id, '4242'); // sellers need a card on file to accept
   const created = await createDealHandler(repo, { creatorUserId: b.user.id, counterpartyUserId: s.user.id, itemDescription: 'iPhone 12', amountCents: 300_00 }, ctx);
   if (!created.ok) throw new Error('create');
   return { repo, ctx, buyer: b.user, seller: s.user, dealId: created.deal.id };
@@ -30,8 +31,7 @@ describe('M2 payments — instant rail (RTP) happy path', () => {
     const exec = (id: string, action: Action) => executeAction(repo, rail, { dealId, action, callerUserId: id, channel: 'user' }, ctx);
 
     ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
-    ok(await exec(buyer.id, { type: 'FUND' }));
-    ok(await exec(seller.id, { type: 'POST_STAKE' }));
+    ok(await exec(buyer.id, { type: 'FUND' })); // arms the deal directly
     ok(await exec(buyer.id, { type: 'HEAD_OUT', actor: 'buyer' }));
     ok(await exec(buyer.id, { type: 'ARRIVE', party: 'buyer' }));
     ok(await exec(seller.id, { type: 'ARRIVE', party: 'seller' }));
@@ -46,8 +46,71 @@ describe('M2 payments — instant rail (RTP) happy path', () => {
     expect(fund.status).toBe('settled');
     expect(fund.amountCents).toBe(300_00 + 4_00 + 5_00); // price + fee + commitment pulled
     const payout = tr.find((t) => t.direction === 'payout_seller')!;
-    expect(payout.amountCents).toBe(300_00 - 4_00 + 5_00); // price - fee + commitment back
+    expect(payout.amountCents).toBe(300_00 - 4_00); // price - fee (no seller commitment to return)
     expect(tr.some((t) => t.direction === 'refund_buyer' && t.amountCents === 5_00)).toBe(true); // buyer commitment back
+  });
+});
+
+describe('M2 seller commitment hold (card on file)', () => {
+  it('places the hold when the seller heads out and releases it on completion', async () => {
+    const { repo, ctx, buyer, seller, dealId } = await setup();
+    const rail = new FakeRail({ fundingRail: 'rtp', instantSettle: true });
+    const exec = (id: string, action: Action) => executeAction(repo, rail, { dealId, action, callerUserId: id, channel: 'user' }, ctx);
+
+    ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
+    ok(await exec(buyer.id, { type: 'FUND' }));
+    ok(await exec(buyer.id, { type: 'HEAD_OUT', actor: 'buyer' }));
+    ok(await exec(seller.id, { type: 'HEAD_OUT', actor: 'seller' }));
+
+    const holdId = (await repo.getDeal(dealId))!.deal.sellerHoldId!;
+    expect(holdId).toBeTruthy();
+    expect(rail.holds.get(holdId)).toMatchObject({ userId: seller.id, amountCents: 5_00, status: 'held' });
+
+    ok(await exec(buyer.id, { type: 'ARRIVE', party: 'buyer' }));
+    ok(await exec(seller.id, { type: 'ARRIVE', party: 'seller' }));
+    const revealed = ok(await exec(buyer.id, { type: 'REVEAL_CODE' }));
+    ok(await exec(seller.id, { type: 'ENTER_CODE', code: (revealed as any).secret.releaseCode }));
+    ok(await exec(buyer.id, { type: 'CONFIRM_RECEIVED' }));
+
+    expect(rail.holds.get(holdId)!.status).toBe('released'); // never charged on a completed deal
+    expect((await repo.getDeal(dealId))!.deal.sellerHoldId).toBeNull();
+  });
+
+  it('captures the hold to the buyer when the seller backs out after heading out', async () => {
+    const { repo, ctx, buyer, seller, dealId } = await setup();
+    const rail = new FakeRail({ fundingRail: 'rtp', instantSettle: true });
+    const exec = (id: string, action: Action) => executeAction(repo, rail, { dealId, action, callerUserId: id, channel: 'user' }, ctx);
+
+    ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
+    ok(await exec(buyer.id, { type: 'FUND' }));
+    ok(await exec(seller.id, { type: 'HEAD_OUT', actor: 'seller' }));
+    const holdId = (await repo.getDeal(dealId))!.deal.sellerHoldId!;
+
+    ok(await exec(seller.id, { type: 'CANCEL', actor: 'seller' })); // self-declared no-show
+
+    expect(rail.holds.get(holdId)!.status).toBe('captured');
+    expect((await repo.getDeal(dealId))!.deal.sellerHoldId).toBeNull();
+    // the captured $5 goes OUT to the buyer, alongside their full escrow refund
+    const refunds = (await repo.listTransfers(dealId)).filter((t) => t.direction === 'refund_buyer');
+    expect(refunds.some((t) => t.amountCents === 300_00 + 4_00 + 5_00)).toBe(true); // escrow made whole
+    expect(refunds.some((t) => t.amountCents === 5_00)).toBe(true); // + the seller's commitment
+  });
+
+  it('collects off the card even when the seller never headed out (no prior hold)', async () => {
+    const { repo, ctx, buyer, seller, dealId } = await setup();
+    const rail = new FakeRail({ fundingRail: 'rtp', instantSettle: true });
+    const exec = (id: string, action: Action) => executeAction(repo, rail, { dealId, action, callerUserId: id, channel: 'user' }, ctx);
+
+    ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
+    ok(await exec(buyer.id, { type: 'FUND' }));
+    ok(await exec(buyer.id, { type: 'HEAD_OUT', actor: 'buyer' }));
+    ok(await exec(buyer.id, { type: 'ARRIVE', party: 'buyer' }));
+    expect((await repo.getDeal(dealId))!.deal.sellerHoldId).toBeNull(); // seller never headed out
+
+    const r = await executeAction(repo, rail, { dealId, action: { type: 'EXPIRE_NO_SHOW', noShow: 'seller' }, callerUserId: null, channel: 'system' }, ctx);
+    expect(r.ok).toBe(true);
+    // a place-and-capture happened against the card on file
+    expect([...rail.holds.values()].some((h) => h.userId === seller.id && h.status === 'captured')).toBe(true);
   });
 });
 
@@ -59,7 +122,6 @@ describe('M2 payout-settlement gate (ACH)', () => {
 
     ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
     ok(await exec(buyer.id, { type: 'FUND' }));
-    ok(await exec(seller.id, { type: 'POST_STAKE' }));
     ok(await exec(buyer.id, { type: 'HEAD_OUT', actor: 'buyer' }));
     ok(await exec(buyer.id, { type: 'ARRIVE', party: 'buyer' }));
     ok(await exec(seller.id, { type: 'ARRIVE', party: 'seller' }));
@@ -100,7 +162,6 @@ describe('M2 return safety', () => {
     const exec = (id: string, action: Action) => executeAction(repo, rail, { dealId, action, callerUserId: id, channel: 'user' }, ctx);
     ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
     ok(await exec(buyer.id, { type: 'FUND' }));
-    ok(await exec(seller.id, { type: 'POST_STAKE' }));
     ok(await exec(buyer.id, { type: 'HEAD_OUT', actor: 'buyer' }));
     ok(await exec(buyer.id, { type: 'ARRIVE', party: 'buyer' }));
     ok(await exec(seller.id, { type: 'ARRIVE', party: 'seller' }));

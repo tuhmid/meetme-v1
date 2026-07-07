@@ -24,6 +24,8 @@ export interface UserRow {
   trustScore: number;
   completedDeals: number;
   acceptedTermsAt: number | null;
+  hasCardOnFile: boolean; // seller commitment guarantee — required to accept terms
+  cardLast4: string | null;
 }
 
 export interface DealRecord {
@@ -120,6 +122,10 @@ export interface Repo {
 
   // KYC / identity tier (M?)
   setKyc(id: string, tier: 'phone' | 'id_verified', status: 'none' | 'pending' | 'verified' | 'rejected'): Promise<void>;
+
+  // card on file (seller commitment) + the deal's active card hold
+  setCardOnFile(userId: string, last4: string): Promise<void>;
+  setSellerHold(dealId: string, holdId: string | null): Promise<void>;
 
   // chat
   addMessage(dealId: string, senderId: string, body: string): Promise<void>;

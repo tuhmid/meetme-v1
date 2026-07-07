@@ -12,6 +12,7 @@ async function setup(amountCents = 300_00) {
   const b = await signup(repo, { phone: '+15551110000', name: 'Maya Chen', isVoip: false }, ctx);
   const s = await signup(repo, { phone: '+15552220000', name: 'Sam Rivera', isVoip: false }, ctx);
   if (!b.ok || !s.ok) throw new Error('signup failed');
+  await repo.setCardOnFile(s.user.id, '4242'); // sellers need a card on file to accept
   const created = await createDealHandler(repo, { creatorUserId: b.user.id, counterpartyUserId: s.user.id, itemDescription: 'iPhone 12', amountCents }, ctx);
   if (!created.ok) throw new Error('create failed: ' + created.reason);
   return { repo, ctx, buyer: b.user, seller: s.user, dealId: created.deal.id };
@@ -28,8 +29,7 @@ describe('M1 handler — happy path persists atomically and conserves money', ()
     const user = (id: string, action: Action) => handleAction(repo, { dealId, action, callerUserId: id, channel: 'user' }, ctx);
 
     ok(await user(seller.id, { type: 'ACCEPT_TERMS' }));
-    ok(await user(buyer.id, { type: 'FUND' }));
-    ok(await user(seller.id, { type: 'POST_STAKE' }));
+    ok(await user(buyer.id, { type: 'FUND' })); // arms the deal — no seller stake turn
     ok(await user(buyer.id, { type: 'HEAD_OUT', actor: 'buyer' }));
     ok(await user(buyer.id, { type: 'ARRIVE', party: 'buyer' }));
     ok(await user(seller.id, { type: 'ARRIVE', party: 'seller' }));
@@ -40,7 +40,7 @@ describe('M1 handler — happy path persists atomically and conserves money', ()
 
     const rec = await repo.getDeal(dealId);
     expect(rec!.deal.state).toBe('RELEASED');
-    expect(rec!.version).toBe(9); // 9 committed actions, each bumps the optimistic-lock version
+    expect(rec!.version).toBe(8); // 8 committed actions, each bumps the optimistic-lock version
 
     expect(balanced(repo.ledger)).toBe(true);
     expect(balanceOf(repo.ledger, escrowAcct(dealId))).toBe(0); // escrow drained
@@ -85,6 +85,27 @@ describe('M1 authorization (who can act)', () => {
   });
 });
 
+describe('card-on-file gate (seller commitment)', () => {
+  it('a seller without a card cannot ACCEPT_TERMS; adding one unlocks it', async () => {
+    const repo = new MemoryRepo();
+    const ctx = makeServerCtx(1_700_000_000_000);
+    const b = await signup(repo, { phone: '+15551110001', name: 'Maya', isVoip: false }, ctx);
+    const s = await signup(repo, { phone: '+15552220001', name: 'Sam', isVoip: false }, ctx);
+    if (!b.ok || !s.ok) throw new Error('signup failed');
+    const created = await createDealHandler(repo, { creatorUserId: b.user.id, counterpartyUserId: s.user.id, itemDescription: 'x', amountCents: 100_00 }, ctx);
+    if (!created.ok) throw new Error('create failed');
+
+    const r = await handleAction(repo, { dealId: created.deal.id, action: { type: 'ACCEPT_TERMS' }, callerUserId: s.user.id, channel: 'user' }, ctx);
+    expect(!r.ok && r.code).toBe('card_required');
+    expect((await repo.getDeal(created.deal.id))!.deal.state).toBe('DRAFT'); // nothing committed
+
+    await repo.setCardOnFile(s.user.id, '4242');
+    const r2 = await handleAction(repo, { dealId: created.deal.id, action: { type: 'ACCEPT_TERMS' }, callerUserId: s.user.id, channel: 'user' }, ctx);
+    expect(r2.ok).toBe(true);
+    expect((await repo.getUser(s.user.id))!.cardLast4).toBe('4242');
+  });
+});
+
 describe('M1 rejected transition persists nothing', () => {
   it('FUND on a DRAFT deal is rejected and writes no ledger', async () => {
     const { repo, ctx, buyer, dealId } = await setup();
@@ -116,7 +137,7 @@ describe('M1 signup guards (sybil / VoIP / terms)', () => {
     expect((await signup(repo, { phone: '+15553334444', name: 'B', isVoip: false }, ctx)).ok).toBe(false); // duplicate phone
 
     // a user who never accepted terms cannot create a deal
-    await repo.addUser({ id: 'no-terms', phone: '+19', phoneIsVoip: false, name: 'NT', avatarColor: '#000', identityTier: 'phone', kycStatus: 'none', trustScore: 50, completedDeals: 0, acceptedTermsAt: null });
+    await repo.addUser({ id: 'no-terms', phone: '+19', phoneIsVoip: false, name: 'NT', avatarColor: '#000', identityTier: 'phone', kycStatus: 'none', trustScore: 50, completedDeals: 0, acceptedTermsAt: null, hasCardOnFile: false, cardLast4: null });
     const other = first.ok ? first.user.id : '';
     const r = await createDealHandler(repo, { creatorUserId: 'no-terms', counterpartyUserId: other, itemDescription: 'x', amountCents: 100_00 }, ctx);
     expect(!r.ok && r.code).toBe('forbidden');

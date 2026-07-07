@@ -62,6 +62,31 @@ export class FakeRail implements PaymentRail {
     return this.transfers.get(transferId)?.status ?? 'failed';
   }
 
+  // --- card-on-file commitment (seller side) ---
+  readonly holds = new Map<string, { userId: string; amountCents: number; status: 'held' | 'captured' | 'released' }>();
+
+  async validateCard(_userId: string): Promise<{ ok: boolean; last4: string }> {
+    return { ok: true, last4: '4242' }; // $0 validation always passes on the fake rail
+  }
+
+  async holdCommitment(userId: string, amountCents: number): Promise<{ holdId: string }> {
+    const holdId = `hold_${++this.seq}`;
+    this.holds.set(holdId, { userId, amountCents, status: 'held' });
+    return { holdId };
+  }
+
+  async captureHold(holdId: string): Promise<{ ok: boolean }> {
+    const h = this.holds.get(holdId);
+    if (!h) return { ok: false };
+    h.status = 'captured';
+    return { ok: true }; // collection never fails on the fake rail
+  }
+
+  async releaseHold(holdId: string): Promise<void> {
+    const h = this.holds.get(holdId);
+    if (h && h.status === 'held') h.status = 'released';
+  }
+
   // --- test/sim helpers (a real rail gets these via webhooks) ---
   settle(transferId: string): void {
     const t = this.transfers.get(transferId);

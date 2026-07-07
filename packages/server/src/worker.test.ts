@@ -16,13 +16,13 @@ async function driveTo(state: 'EN_ROUTE' | 'CONFIRMING', railCfg: ConstructorPar
   const b = await signup(repo, { phone: `+1555${Math.random()}`, name: 'Maya', isVoip: false }, ctx);
   const s = await signup(repo, { phone: `+1666${Math.random()}`, name: 'Sam', isVoip: false }, ctx);
   if (!b.ok || !s.ok) throw new Error('signup');
+  await repo.setCardOnFile(s.user.id, '4242'); // sellers need a card on file to accept
   const created = await createDealHandler(repo, { creatorUserId: b.user.id, counterpartyUserId: s.user.id, itemDescription: 'x', amountCents: 300_00 }, ctx);
   if (!created.ok) throw new Error('create');
   const dealId = created.deal.id;
   const exec = (id: string, a: Action) => executeAction(repo, rail, { dealId, action: a, callerUserId: id, channel: 'user' }, ctx);
   await exec(s.user.id, { type: 'ACCEPT_TERMS' });
-  await exec(b.user.id, { type: 'FUND' });
-  await exec(s.user.id, { type: 'POST_STAKE' });
+  await exec(b.user.id, { type: 'FUND' }); // arms the deal directly
   await exec(b.user.id, { type: 'HEAD_OUT', actor: 'buyer' }); // -> EN_ROUTE
   if (state === 'EN_ROUTE') {
     if (arrivals === 'buyer' || arrivals === 'both') await exec(b.user.id, { type: 'ARRIVE', party: 'buyer' });
@@ -68,7 +68,7 @@ describe('worker: dueTransition (pure timing)', () => {
 
 describe('worker: runWorkerOnce (driver)', () => {
   it('expires a no-show and pays the present party (RTP)', async () => {
-    const { repo, rail, buyer, dealId } = await driveTo('EN_ROUTE', { fundingRail: 'rtp', instantSettle: true }, 'buyer');
+    const { repo, rail, buyer, seller, dealId } = await driveTo('EN_ROUTE', { fundingRail: 'rtp', instantSettle: true }, 'buyer');
     const rec = await repo.getDeal(dealId);
     const now = rec!.updatedAt + DEFAULT_WINDOWS.noShowMs + 1;
     const summary = await runWorkerOnce(repo, rail, () => makeServerCtx(now), { now });
@@ -76,8 +76,11 @@ describe('worker: runWorkerOnce (driver)', () => {
     const after = await repo.getDeal(dealId);
     expect(after!.deal.state).toBe('EXPIRED_NO_SHOW');
     expect(after!.deal.faultParty).toBe('seller'); // buyer showed, seller didn't
-    // present party (buyer) got refunded on the rail
-    expect((await repo.listTransfers(dealId)).some((t) => t.direction === 'refund_buyer')).toBe(true);
+    // present party (buyer) got refunded on the rail — full escrow + the seller's captured commitment
+    const refunds = (await repo.listTransfers(dealId)).filter((t) => t.direction === 'refund_buyer');
+    expect(refunds.some((t) => t.amountCents === 300_00 + 4_00 + 5_00)).toBe(true);
+    expect(refunds.some((t) => t.amountCents === 5_00)).toBe(true); // the seller's commitment, collected off their card
+    expect([...rail.holds.values()].some((h) => h.userId === seller.id && h.status === 'captured')).toBe(true);
     void buyer;
   });
 

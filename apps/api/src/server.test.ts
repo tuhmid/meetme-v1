@@ -30,9 +30,9 @@ describe('M3 API — drives a full deal over HTTP (the walking skeleton spine)',
       return res.json();
     };
 
+    await post('/payment-method', {}, seller); // card on file — required to accept as seller
     await act(seller, { type: 'ACCEPT_TERMS' });
-    await act(buyer, { type: 'FUND' });
-    await act(seller, { type: 'POST_STAKE' });
+    await act(buyer, { type: 'FUND' }); // arms the deal — no seller stake turn
     await act(buyer, { type: 'HEAD_OUT', actor: 'buyer' });
     await act(buyer, { type: 'ARRIVE', party: 'buyer' });
     await act(seller, { type: 'ARRIVE', party: 'seller' });
@@ -90,6 +90,7 @@ describe('M3 API — drives a full deal over HTTP (the walking skeleton spine)',
 
     // an accepted (AGREED) deal is not deletable
     const d2 = (await post('/deals', { counterpartyUserId: seller, itemDescription: 'y', amountCents: 300_00 }, buyer)).json().dealId as string;
+    await post('/payment-method', {}, seller);
     await post(`/deals/${d2}/actions`, { action: { type: 'ACCEPT_TERMS' } }, seller);
     expect((await del(`/deals/${d2}`, buyer)).statusCode).toBe(409);
   });
@@ -140,9 +141,9 @@ describe('M3 API — drives a full deal over HTTP (the walking skeleton spine)',
     const buyer = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;
     const seller = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string;
     const dealId = (await post('/deals', { counterpartyUserId: seller, itemDescription: 'iPhone 12', amountCents: 300_00 }, buyer)).json().dealId as string;
+    await post('/payment-method', {}, seller);
     await act(seller, { type: 'ACCEPT_TERMS' });
-    await act(buyer, { type: 'FUND' });
-    await act(seller, { type: 'POST_STAKE' }); // -> ARMED
+    await act(buyer, { type: 'FUND' }); // -> ARMED
 
     await act(buyer, { type: 'OPEN_DISPUTE', actor: 'buyer' });
     expect((await get(`/deals/${dealId}`, buyer)).json().deal.state).toBe('DISPUTED');
@@ -167,9 +168,9 @@ describe('M3 API — drives a full deal over HTTP (the walking skeleton spine)',
     const buyer = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;
     const seller = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string;
     const dealId = (await post('/deals', { counterpartyUserId: seller, itemDescription: 'iPhone 12', amountCents: 300_00 }, buyer)).json().dealId as string;
+    await post('/payment-method', {}, seller);
     await act(seller, { type: 'ACCEPT_TERMS' });
     await act(buyer, { type: 'FUND' });
-    await act(seller, { type: 'POST_STAKE' });
     await act(buyer, { type: 'HEAD_OUT', actor: 'buyer' });
     await act(buyer, { type: 'ARRIVE', party: 'buyer' });
     await act(seller, { type: 'ARRIVE', party: 'seller' });
@@ -185,6 +186,33 @@ describe('M3 API — drives a full deal over HTTP (the walking skeleton spine)',
     expect(view.deal.ratings.seller).toBe(4);
     expect(view.sellerTrust).toBe(100); // buyer's 5★ -> 5/5*100
     expect(view.buyerTrust).toBe(80); //  seller's 4★ -> 4/5*100
+  });
+
+  it('card gate: the seller cannot accept terms without a card on file; adding one unlocks it', async () => {
+    const app = buildServer({ repo: new MemoryRepo(), rail: new FakeRail({ fundingRail: 'rtp', instantSettle: true }), makeCtx: () => makeServerCtx(), allowDev: true });
+    const post = (url: string, payload: object, uid?: string): Promise<any> =>
+      app.inject({ method: 'POST', url, payload, headers: uid ? { authorization: `Bearer dev:${uid}` } : {} }) as Promise<any>;
+
+    const buyer = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;
+    const seller = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string;
+    const dealId = (await post('/deals', { counterpartyUserId: seller, itemDescription: 'x', amountCents: 100_00 }, buyer)).json().dealId as string;
+
+    const blocked = await post(`/deals/${dealId}/actions`, { action: { type: 'ACCEPT_TERMS' } }, seller);
+    expect(blocked.statusCode).toBe(400);
+    expect(blocked.json().code).toBe('card_required');
+
+    const card = await post('/payment-method', {}, seller);
+    expect(card.statusCode).toBe(200);
+    expect(card.json().last4).toBe('4242'); // FakeRail's stub card
+
+    const accepted = await post(`/deals/${dealId}/actions`, { action: { type: 'ACCEPT_TERMS' } }, seller);
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json().deal.state).toBe('AGREED');
+  });
+
+  it('payment-method requires auth', async () => {
+    const app = buildServer({ repo: new MemoryRepo(), rail: new FakeRail({ instantSettle: true }), makeCtx: () => makeServerCtx() });
+    expect(((await app.inject({ method: 'POST', url: '/payment-method', payload: {} })) as any).statusCode).toBe(401);
   });
 
   it('KYC gate: a deal over $500 needs ID verification; verifying unlocks it', async () => {
@@ -225,9 +253,9 @@ describe('M3 API — drives a full deal over HTTP (the walking skeleton spine)',
     const buyer = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;
     const seller = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string;
     const dealId = (await post('/deals', { counterpartyUserId: seller, itemDescription: 'x', amountCents: 300_00 }, buyer)).json().dealId as string;
+    await post('/payment-method', {}, seller);
     await act(seller, { type: 'ACCEPT_TERMS' });
     await act(buyer, { type: 'FUND' });
-    await act(seller, { type: 'POST_STAKE' });
     await act(buyer, { type: 'OPEN_DISPUTE', actor: 'buyer' });
     await act(buyer, { type: 'PROPOSE_RESOLUTION', actor: 'buyer', outcome: 'split' });
     expect((await get(`/deals/${dealId}`, buyer)).json().deal.state).toBe('DISPUTED'); // one proposal
@@ -268,9 +296,9 @@ describe('M3 API — drives a full deal over HTTP (the walking skeleton spine)',
     const seller = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string;
     const dealId = (await post('/deals', { counterpartyUserId: seller, itemDescription: 'x', amountCents: 300_00 }, buyer)).json().dealId as string;
     const act = (uid: string, action: Action) => post(`/deals/${dealId}/actions`, { action }, uid);
+    await post('/payment-method', {}, seller);
     await act(seller, { type: 'ACCEPT_TERMS' });
     await act(buyer, { type: 'FUND' });
-    await act(seller, { type: 'POST_STAKE' });
     await act(buyer, { type: 'HEAD_OUT', actor: 'buyer' }); // -> EN_ROUTE
 
     await post(`/deals/${dealId}/location`, { lat: 40.7128, lng: -74.006 }, buyer);
@@ -345,6 +373,7 @@ describe('safety — block & report', () => {
     const maya = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;
     const sam = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string;
     const dealId = (await post('/deals', { counterpartyUserId: sam, itemDescription: 'x', amountCents: 100_00 }, maya)).json().dealId as string;
+    await post('/payment-method', {}, sam);
     await post(`/deals/${dealId}/actions`, { action: { type: 'ACCEPT_TERMS' } }, sam);
     expect((await post(`/deals/${dealId}/messages`, { body: 'hi' }, maya)).statusCode).toBe(200);
 

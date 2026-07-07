@@ -30,7 +30,9 @@ export const isTerminal = (s: DealState): boolean => TERMINAL.has(s);
 
 export const ALLOWED_TRANSITIONS: Record<DealState, DealState[]> = {
   DRAFT: ['AGREED', 'CANCELLED'],
-  AGREED: ['FUNDED', 'CANCELLED'],
+  AGREED: ['ARMED', 'CANCELLED'], // FUND arms the deal directly — no seller stake turn
+  // FUNDED is kept for backward compat (DB enum + any legacy rows) but nothing
+  // transitions INTO it anymore; a legacy FUNDED deal can still cancel/refund.
   FUNDED: ['ARMED', 'CANCELLED', 'REFUNDED'],
   ARMED: ['EN_ROUTE', 'DISPUTED', 'EXPIRED_NO_SHOW', 'CANCELLED', 'REFUNDED'],
   EN_ROUTE: ['AT_MEETUP', 'DISPUTED', 'EXPIRED_NO_SHOW'],

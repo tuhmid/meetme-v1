@@ -27,6 +27,7 @@ const ok = (r: HandlerResult) => {
     const b = await signup(repo, { phone: `+1555${suffix}1`, name: 'Maya Chen', isVoip: false }, ctx);
     const s = await signup(repo, { phone: `+1555${suffix}2`, name: 'Sam Rivera', isVoip: false }, ctx);
     if (!b.ok || !s.ok) throw new Error('signup failed');
+    await repo.setCardOnFile(s.user.id, '4242'); // sellers need a card on file to accept
 
     const created = await createDealHandler(repo, { creatorUserId: b.user.id, counterpartyUserId: s.user.id, itemDescription: 'iPhone 12', amountCents: 300_00 }, ctx);
     if (!created.ok) throw new Error('create failed: ' + created.reason);
@@ -34,8 +35,7 @@ const ok = (r: HandlerResult) => {
 
     const user = (id: string, action: Action) => handleAction(repo, { dealId, action, callerUserId: id, channel: 'user' }, ctx);
     ok(await user(s.user.id, { type: 'ACCEPT_TERMS' }));
-    ok(await user(b.user.id, { type: 'FUND' }));
-    ok(await user(s.user.id, { type: 'POST_STAKE' }));
+    ok(await user(b.user.id, { type: 'FUND' })); // arms the deal directly
     ok(await user(b.user.id, { type: 'HEAD_OUT', actor: 'buyer' }));
 
     // M4 geofence: both phones come together -> auto AT_MEETUP (exercises the

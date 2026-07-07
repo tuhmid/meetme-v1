@@ -1,4 +1,4 @@
-import type { Action } from '@meetme/core';
+import { bankAcct, PLATFORM_PENALTY, type Action, type Deal, type SideEffect } from '@meetme/core';
 import { handleAction, type ActionRequest, type HandlerResult } from './handler';
 import type { Repo } from './repo';
 import type { ServerCtx } from './ctx';
@@ -50,6 +50,10 @@ export async function executeAction(repo: Repo, rail: PaymentRail, req: ActionRe
   const res = await handleAction(repo, req, ctx);
   if (!res.ok) return res;
 
+  // seller-commitment card effects first (place/capture/release the hold),
+  // then mirror the committed ledger's payouts onto the rail
+  await runCommitmentEffects(repo, rail, req.dealId, res.deal, res.effects, ctx);
+
   if (MONEY_OUT.has(req.action.type)) {
     const deal = (await repo.getDeal(req.dealId))?.deal ?? res.deal;
     let n = 0;
@@ -68,6 +72,52 @@ export async function executeAction(repo: Repo, rail: PaymentRail, req: ActionRe
     }
   }
   return res;
+}
+
+/**
+ * Drive the seller-commitment card effects on the rail. Runs AFTER the transition
+ * committed — the accounting truth is already in the ledger; these calls execute
+ * (or clean up) the real-world card movement the ledger describes.
+ */
+async function runCommitmentEffects(repo: Repo, rail: PaymentRail, dealId: string, deal: Deal, effects: SideEffect[], ctx: ServerCtx): Promise<void> {
+  for (const eff of effects) {
+    if (eff.type === 'hold_seller_commitment') {
+      if (deal.sellerHoldId) continue; // already placed
+      const { holdId } = await rail.holdCommitment(eff.sellerId, eff.amountCents);
+      await repo.setSellerHold(dealId, holdId);
+    } else if (eff.type === 'capture_seller_commitment') {
+      // no hold means the seller never headed out — place-and-capture against the card on file
+      const holdId = deal.sellerHoldId ?? (await rail.holdCommitment(deal.sellerId, eff.amountCents)).holdId;
+      const captured = await rail.captureHold(holdId);
+      await repo.setSellerHold(dealId, null);
+      if (!captured.ok) await absorbFailedCollection(repo, dealId, deal.sellerId, eff.amountCents, ctx);
+    } else if (eff.type === 'release_seller_hold') {
+      if (deal.sellerHoldId) {
+        await rail.releaseHold(deal.sellerHoldId);
+        await repo.setSellerHold(dealId, null);
+      }
+    }
+  }
+}
+
+/**
+ * Collection failed (empty/prepaid card, dispute): the company absorbs what the
+ * wronged party is owed — their payout already went out — and the seller's trust
+ * is nuked. FakeRail never fails; a real card rail will.
+ */
+async function absorbFailedCollection(repo: Repo, dealId: string, sellerId: string, amountCents: number, ctx: ServerCtx): Promise<void> {
+  const rec = await repo.getDeal(dealId);
+  if (!rec) return;
+  const txn = ctx.newTxnId();
+  await repo.commit(dealId, rec.version, {
+    deal: rec.deal,
+    events: [{ at: ctx.now, actor: 'system', type: 'collection_failed', note: "Couldn't collect the seller's commitment — MeetMe covered it." }],
+    ledger: [
+      { txnId: txn, account: bankAcct(sellerId), amountCents, dealId, memo: 'collection_failed_reversal' },
+      { txnId: txn, account: PLATFORM_PENALTY, amountCents: -amountCents, dealId, memo: 'collection_failed_absorbed' },
+    ],
+    effects: [{ type: 'trust_delta', userId: sellerId, delta: -50 }],
+  });
 }
 
 /** Settlement hooks — a real rail calls these from a Plaid webhook; the M5 worker polls. */
