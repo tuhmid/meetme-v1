@@ -88,10 +88,12 @@ function statusFor(state: string): { label: string; tone: Tone } {
 
 export interface StatusPillProps {
   state: DealState;
+  /** Which edge the pill hugs inside a column (a pill never stretches). */
+  align?: 'flex-start' | 'flex-end';
 }
 
 /** Small status pill that maps a deal-state string to a label + tone. */
-export function StatusPill({ state }: StatusPillProps) {
+export function StatusPill({ state, align = 'flex-start' }: StatusPillProps) {
   const theme = useTheme();
   const { radius } = theme;
   const { label, tone } = statusFor(state);
@@ -100,7 +102,7 @@ export function StatusPill({ state }: StatusPillProps) {
   return (
     <View
       style={{
-        alignSelf: 'flex-start',
+        alignSelf: align,
         backgroundColor: bg,
         borderRadius: radius.pill,
         paddingVertical: 3,

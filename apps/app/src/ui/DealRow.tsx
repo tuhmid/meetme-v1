@@ -66,7 +66,7 @@ export function DealHistoryRow({
         </View>
 
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text numberOfLines={1} style={{ color: colors.text, fontSize: type.size.sm, fontWeight: type.weight.semibold }}>
+          <Text style={{ color: colors.text, fontSize: type.size.sm, fontWeight: type.weight.semibold }}>
             {title}
           </Text>
           {subtitle ? (
@@ -80,7 +80,7 @@ export function DealHistoryRow({
           <Text style={{ color: colors.text, fontSize: type.size.sm, fontWeight: type.weight.bold }}>
             {formatMoney(amountCents, true)}
           </Text>
-          <StatusPill state={state} />
+          <StatusPill state={state} align="flex-end" />
         </View>
       </Animated.View>
     </Pressable>

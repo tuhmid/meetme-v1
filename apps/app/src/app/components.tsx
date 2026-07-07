@@ -1,6 +1,7 @@
 // Small shared pieces that predate the UI kit — used by the Home and Deal screens.
+import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import type { Role, UserProfile } from '../api';
@@ -76,13 +77,14 @@ export function ProfileModal({ visible, loading, profile, onClose, onReportBlock
   const trustColor = trust >= 70 ? theme.colors.primary : trust >= 40 ? theme.colors.warning : theme.colors.danger;
   const initial = (profile?.name ?? '?').trim().charAt(0).toUpperCase();
   const year = profile?.memberSince ? new Date(profile.memberSince).getFullYear() : null;
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.colors.overlay }}>
-        <View style={{ backgroundColor: theme.colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 34, maxHeight: '86%' }}>
+    <SpringSheet visible={visible} onClose={onClose}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 22, paddingTop: 8, paddingBottom: 40 }}>
           {loading || !profile ? (
             // Loading AND failure both land here — never trap the user without an exit.
-            <View style={{ paddingVertical: 30, alignItems: 'center' }}>
+            // minHeight keeps the sheet from jumping when the spinner swaps to content.
+            <View style={{ paddingVertical: 30, alignItems: 'center', minHeight: 240 }}>
               {loading ? (
                 <>
                   <ActivityIndicator color={theme.colors.primary} />
@@ -97,8 +99,7 @@ export function ProfileModal({ visible, loading, profile, onClose, onReportBlock
               <Button label="Close" variant="secondary" onPress={onClose} />
             </View>
           ) : (
-            <ScrollView keyboardShouldPersistTaps="handled">
-              {/* fade the profile in once it has loaded */}
+              // fade the profile in once it has loaded
               <Animated.View entering={FadeIn.duration(theme.motion.duration.base)}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                 <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: profile.avatarColor, alignItems: 'center', justifyContent: 'center' }}>
@@ -139,7 +140,7 @@ export function ProfileModal({ visible, loading, profile, onClose, onReportBlock
                 profile.shared.map((d) => (
                   <View key={d.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: 1, borderTopColor: theme.colors.surfaceAlt }}>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.text }} numberOfLines={1}>{d.itemDescription}</Text>
+                      <Text style={{ color: theme.colors.text }}>{d.itemDescription}</Text>
                       <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>You were {d.youWere} · {formatMoney(d.amountCents)}</Text>
                     </View>
                     <Text style={{ color: d.state === 'RELEASED' ? theme.colors.primary : theme.colors.textDim, fontSize: 12, fontWeight: '600' }}>{STATE_LABEL[d.state] ?? d.state}</Text>
@@ -154,9 +155,58 @@ export function ProfileModal({ visible, loading, profile, onClose, onReportBlock
               <View style={{ height: 12 }} />
               <Button label="Close" onPress={onClose} />
               </Animated.View>
-            </ScrollView>
           )}
-        </View>
+      </ScrollView>
+    </SpringSheet>
+  );
+}
+
+/**
+ * Bottom sheet with a real spring entrance and animated exit, replacing the
+ * stock Modal slide. The Modal itself never animates (animationType="none");
+ * a shared value drives the sheet's translate and the backdrop's fade, and the
+ * Modal only unmounts after the exit finishes.
+ */
+function SpringSheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: ReactNode }) {
+  const theme = useTheme();
+  const progress = useSharedValue(0);
+  const [mounted, setMounted] = useState(visible);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      const { damping, stiffness, mass } = theme.motion.spring;
+      progress.value = withSpring(1, { damping, stiffness, mass, overshootClamping: true });
+    } else if (mounted) {
+      progress.value = withTiming(
+        0,
+        { duration: theme.motion.duration.fast, easing: Easing.bezier(...theme.motion.easing.accelerate) },
+        (finished) => { if (finished) runOnJS(setMounted)(false); }
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value * 0.45 }));
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - progress.value) * 620 }] }));
+
+  return (
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000' }, backdropStyle]}>
+          <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
+        </Animated.View>
+        <Animated.View
+          style={[
+            { backgroundColor: theme.colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '86%', overflow: 'hidden' },
+            sheetStyle,
+          ]}
+        >
+          <View style={{ alignItems: 'center', paddingTop: 8 }}>
+            <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: theme.colors.border }} />
+          </View>
+          {children}
+        </Animated.View>
       </View>
     </Modal>
   );
