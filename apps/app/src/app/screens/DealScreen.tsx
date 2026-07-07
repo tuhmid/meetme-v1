@@ -120,7 +120,7 @@ export default function DealScreen() {
               deal.state === 'DRAFT' && role === 'seller' ? 'Decline this deal'
               : deal.state === 'DRAFT' || deal.state === 'AGREED' ? 'Cancel deal'
               : deal.state === 'ARMED' ? 'Cancel deal — full refund'
-              : `Back out — forfeit ${formatMoney(deal.commitmentCents)}`;
+              : `Back out — forfeit your ${formatMoney(deal.commitmentCents)} deposit`;
             return (
               <>
             <Pressable onPress={() => navigation.goBack()}><Text style={{ color: theme.colors.primary, marginBottom: 10 }}>← My deals</Text></Pressable>

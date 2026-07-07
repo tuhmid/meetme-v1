@@ -42,8 +42,8 @@ export function TrustModal({ visible, amount, onClose }: { visible: boolean; amo
   const rows: Array<[IconName, string, string]> = [
     ['lock-closed', 'Held in escrow', `Your ${amount ? formatMoney(amount) : 'payment'} is held by MeetMe — never sent to the other person up front.`],
     ['cash-outline', 'Released only on handoff', 'The seller is paid only after you confirm you got the item, using a one-time release code.'],
-    ['shield-checkmark', 'No-show protection', 'If the other person never shows, you are fully refunded — and their forfeited $5 commitment is paid to you, not to MeetMe.'],
-    ['card-outline', 'Sellers never pay upfront', 'Sellers just keep a card on file — a small hold goes on when they head out, and it is released once the deal completes.'],
+    ['shield-checkmark', 'No-show protection', 'If the other person never shows, you are fully refunded — and their forfeited $5 deposit is paid to you, not to MeetMe.'],
+    ['card-outline', 'Sellers never pay upfront', 'Sellers just keep a card on file — a $5 hold goes on when they head out, and it is released once the deal completes.'],
     ['arrow-undo', 'Refundable', 'Cancel before the handoff and everything comes back to you.'],
   ];
   return (

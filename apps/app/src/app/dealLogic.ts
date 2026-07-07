@@ -16,6 +16,11 @@ export const toE164 = (v: string): string => '+1' + phoneDigits(v);
 export const phoneValid = (v: string): boolean => phoneDigits(v).length === 10;
 export const centsFromInput = (v: string): number => parseInt(v.replace(/\D/g, '') || '0', 10); // cash-register style
 export const formatMoney = (cents: number): string => `$${(cents / 100).toFixed(2)}`; // exact — never rounds to whole dollars
+
+// mirror of core splitFee: buyer's fee share is capped at $4 so completing a
+// deal always returns at least $1 of the $5 deposit
+export const buyerFeeCents = (totalFeeCents: number): number => Math.min(Math.floor(totalFeeCents / 2), 400);
+export const sellerFeeCents = (totalFeeCents: number): number => totalFeeCents - buyerFeeCents(totalFeeCents);
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) UIManager.setLayoutAnimationEnabledExperimental(true);
 export const gentle = () => LayoutAnimation.configureNext(LayoutAnimation.create(220, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity));
 
@@ -42,7 +47,7 @@ export function nextActions(deal: Deal, role: Role): Action[] {
 export function labelFor(a: Action, deal: Deal): string {
   switch (a.type) {
     case 'ACCEPT_TERMS': return 'Accept terms';
-    case 'FUND': return `Fund ${formatMoney(deal.amountCents + deal.feeCentsPerSide + deal.commitmentCents)}`;
+    case 'FUND': return `Fund ${formatMoney(deal.amountCents + deal.commitmentCents)}`;
     case 'HEAD_OUT': return "I'm heading out";
     case 'ARRIVE': return "I've arrived";
     case 'REVEAL_CODE': return 'Reveal release code';
@@ -108,7 +113,7 @@ export function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHin
     let title = 'Your move';
     let body = '';
     if (s === 'DRAFT') { title = 'Review and accept the terms'; body = 'Nothing is charged until the buyer funds the escrow.'; }
-    else if (s === 'AGREED') { title = 'Fund the escrow'; body = `${formatMoney(deal.amountCents)} item + ${formatMoney(deal.feeCentsPerSide)} fee + ${formatMoney(deal.commitmentCents)} refundable commitment. MeetMe holds it all — the seller is only paid after you confirm the handoff.`; }
+    else if (s === 'AGREED') { title = 'Fund the escrow'; body = `${formatMoney(deal.amountCents)} item + $5 deposit. Complete the deal and ${formatMoney(deal.commitmentCents - buyerFeeCents(deal.totalFeeCents))} of it comes back — the rest is the fee, only ever kept on a completed deal.`; }
     else if (s === 'ARMED') {
       title = "Head out when you're ready";
       body = role === 'seller'
@@ -132,30 +137,31 @@ export function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHin
 
 // What concretely happened to the money — the terminal-state outcome Callout.
 export function outcomeFor(deal: Deal, role: Role, otherFirst: string): { tone: Tone; kicker: string; title: string; body: string } | null {
-  const total = formatMoney(deal.amountCents + deal.feeCentsPerSide + deal.commitmentCents);
   const price = formatMoney(deal.amountCents);
-  const commit = formatMoney(deal.commitmentCents);
+  const deposit = formatMoney(deal.commitmentCents);
+  const buyerFee = buyerFeeCents(deal.totalFeeCents);
+  const sellerFee = sellerFeeCents(deal.totalFeeCents);
   switch (deal.state) {
     case 'RELEASED':
       return role === 'buyer'
-        ? { tone: 'success', kicker: 'Deal complete', title: 'Payment released', body: `You paid ${total}. ${price} went to the seller and your ${commit} commitment came back.` }
-        : { tone: 'success', kicker: 'Deal complete', title: 'You got paid', body: `${price} is on its way to you, and your ${commit} commitment came back.` };
+        ? { tone: 'success', kicker: 'Deal complete', title: 'Payment released', body: `You paid ${formatMoney(deal.amountCents + buyerFee)} all-in — ${price} to the seller, ${formatMoney(deal.commitmentCents - buyerFee)} of your ${deposit} deposit back.` }
+        : { tone: 'success', kicker: 'Deal complete', title: 'You got paid', body: `You got ${formatMoney(deal.amountCents - sellerFee)} (${price} − ${formatMoney(sellerFee)} fee). Your ${deposit} hold was released.` };
     case 'DISPUTE_RESOLVED':
       return { tone: 'success', kicker: 'Resolved', title: 'Dispute resolved', body: deal.resolutionNote || 'A specialist reviewed the case and settled the funds.' };
     case 'REFUNDED':
       return role === 'buyer'
-        ? { tone: 'neutral', kicker: 'Refunded', title: 'You got everything back', body: `${total} was returned to you in full.` }
-        : { tone: 'neutral', kicker: 'Refunded', title: 'Deal refunded', body: `The buyer was refunded and your ${commit} commitment came back. No money changed hands.` };
+        ? { tone: 'neutral', kicker: 'Refunded', title: 'You got everything back', body: `${formatMoney(deal.amountCents + deal.commitmentCents)} was returned to you in full — price and deposit, no fees.` }
+        : { tone: 'neutral', kicker: 'Refunded', title: 'Deal refunded', body: 'The buyer was refunded in full and any hold on your card was released. No money changed hands.' };
     case 'CANCELLED':
       return { tone: 'neutral', kicker: 'Cancelled', title: 'Deal cancelled', body: 'Anything already funded was returned in full.' };
     case 'EXPIRED_NO_SHOW': {
       const iArrived = role === 'buyer' ? deal.buyerArrived : deal.sellerArrived;
       const theyArrived = role === 'buyer' ? deal.sellerArrived : deal.buyerArrived;
       const body = iArrived && !theyArrived
-        ? `${otherFirst} didn't show. You were refunded in full, and their ${commit} commitment was forfeited.`
+        ? `${otherFirst} didn't show. Their ${deposit} deposit was paid to you — not to MeetMe — and anything you'd funded came back in full.`
         : !iArrived && theyArrived
-          ? `You didn't make it, so your ${commit} commitment was forfeited. Everything else was returned.`
-          : `Nobody made it to the meetup. Commitments were forfeited and the rest was returned.`;
+          ? `You didn't make it, so your ${deposit} deposit went to ${otherFirst}. Anything else you'd funded was returned.`
+          : `Nobody made it to the meetup. The ${deposit} deposits were forfeited and the rest was returned.`;
       return { tone: 'warning', kicker: 'No-show', title: 'Deal expired', body };
     }
   }

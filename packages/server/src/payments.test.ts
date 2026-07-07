@@ -44,10 +44,10 @@ describe('M2 payments — instant rail (RTP) happy path', () => {
     const tr = await repo.listTransfers(dealId);
     const fund = tr.find((t) => t.direction === 'fund_buyer')!;
     expect(fund.status).toBe('settled');
-    expect(fund.amountCents).toBe(300_00 + 4_00 + 5_00); // price + fee + commitment pulled
+    expect(fund.amountCents).toBe(300_00 + 5_00); // price + the $5 deposit pulled, no fee upfront
     const payout = tr.find((t) => t.direction === 'payout_seller')!;
-    expect(payout.amountCents).toBe(300_00 - 4_00); // price - fee (no seller commitment to return)
-    expect(tr.some((t) => t.direction === 'refund_buyer' && t.amountCents === 5_00)).toBe(true); // buyer commitment back
+    expect(payout.amountCents).toBe(300_00 - 8_00); // price - the seller's $8 fee share
+    expect(tr.some((t) => t.direction === 'refund_buyer' && t.amountCents === 1_00)).toBe(true); // deposit back minus the buyer's $4 fee share
   });
 });
 
@@ -92,8 +92,8 @@ describe('M2 seller commitment hold (card on file)', () => {
     expect((await repo.getDeal(dealId))!.deal.sellerHoldId).toBeNull();
     // the captured $5 goes OUT to the buyer, alongside their full escrow refund
     const refunds = (await repo.listTransfers(dealId)).filter((t) => t.direction === 'refund_buyer');
-    expect(refunds.some((t) => t.amountCents === 300_00 + 4_00 + 5_00)).toBe(true); // escrow made whole
-    expect(refunds.some((t) => t.amountCents === 5_00)).toBe(true); // + the seller's commitment
+    expect(refunds.some((t) => t.amountCents === 300_00 + 5_00)).toBe(true); // escrow made whole
+    expect(refunds.some((t) => t.amountCents === 5_00)).toBe(true); // + the seller's deposit
   });
 
   it('collects off the card even when the seller never headed out (no prior hold)', async () => {
@@ -186,6 +186,6 @@ describe('M2 refund push', () => {
     ok(await exec(buyer.id, { type: 'CANCEL', actor: 'buyer' }));
     expect((await repo.getDeal(dealId))!.deal.state).toBe('REFUNDED');
     const refunds = (await repo.listTransfers(dealId)).filter((t) => t.direction === 'refund_buyer');
-    expect(refunds.some((t) => t.amountCents === 300_00 + 4_00 + 5_00)).toBe(true); // full refund to buyer
+    expect(refunds.some((t) => t.amountCents === 300_00 + 5_00)).toBe(true); // full refund to buyer
   });
 });

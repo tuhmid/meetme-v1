@@ -36,7 +36,9 @@ export function makeSupabaseRepo(url: string, serviceRoleKey: string): Repo {
     useCase: r.use_case,
     itemDescription: r.item_description,
     amountCents: Number(r.amount_cents),
-    feeCentsPerSide: Number(r.fee_cents_per_side),
+    // column names predate the flat-deposit model: fee_cents_per_side now stores
+    // the deal's TOTAL fee, commitment_cents the flat $5 deposit (no migration)
+    totalFeeCents: Number(r.fee_cents_per_side),
     commitmentCents: Number(r.commitment_cents),
     state: r.state,
     releaseCodeHash: r.release_code_hash,
@@ -92,8 +94,9 @@ export function makeSupabaseRepo(url: string, serviceRoleKey: string): Repo {
         use_case: deal.useCase,
         item_description: deal.itemDescription,
         amount_cents: deal.amountCents,
-        fee_cents_per_side: deal.feeCentsPerSide,
-        commitment_cents: deal.commitmentCents,
+        fee_cents_per_side: deal.totalFeeCents, // legacy column name; holds the TOTAL fee
+        commitment_cents: deal.commitmentCents, // the flat $5 deposit
+
         state: deal.state,
         release_code_hash: deal.releaseCodeHash,
         code_revealed: deal.codeRevealed,

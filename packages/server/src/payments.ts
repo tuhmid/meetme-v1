@@ -21,7 +21,7 @@ export async function executeAction(repo: Repo, rail: PaymentRail, req: ActionRe
   if (req.action.type === 'FUND') {
     const rec = await repo.getDeal(req.dealId);
     if (!rec) return { ok: false, code: 'not_found', reason: 'deal not found' };
-    const total = rec.deal.amountCents + rec.deal.feeCentsPerSide + rec.deal.commitmentCents;
+    const total = rec.deal.amountCents + rec.deal.commitmentCents; // price + the buyer's $5 deposit; no fee prepaid
     const intent = { dealId: req.dealId, userId: rec.deal.buyerId, amountCents: total, idempotencyKey: `fund:${req.dealId}` };
 
     const risk = await rail.evaluateFundingRisk(intent);

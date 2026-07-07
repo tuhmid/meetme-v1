@@ -10,7 +10,7 @@
 // one DB transaction. Pure + deterministic (all time/ids/codes come from ctx).
 // ---------------------------------------------------------------------------
 
-import { computeCommitmentCents, computeFeeCents, usd, type Cents } from './money';
+import { DEPOSIT_CENTS, computeTotalFeeCents, splitFee, usd, type Cents } from './money';
 import { canTransition, type DealState } from './states';
 import {
   PLATFORM_FEES,
@@ -43,8 +43,8 @@ export function createDeal(input: {
     useCase: input.useCase,
     itemDescription: input.itemDescription,
     amountCents: input.amountCents,
-    feeCentsPerSide: computeFeeCents(input.amountCents),
-    commitmentCents: computeCommitmentCents(input.amountCents),
+    totalFeeCents: computeTotalFeeCents(input.amountCents),
+    commitmentCents: DEPOSIT_CENTS,
     state: 'DRAFT',
     releaseCodeHash: null,
     codeRevealed: false,
@@ -68,14 +68,16 @@ export function createDeal(input: {
 // --- ledger builders (each returns balanced, non-zero legs) ----------------
 
 function releaseLedger(deal: Deal, ctx: Ctx): LedgerEntry[] {
+  // completion is the ONLY place fees exist: seller's share netted from the
+  // payout, buyer's share netted from their deposit (capped so ≥ $1 comes back)
   const h = escrowHeld(deal);
-  const fee = deal.feeCentsPerSide; // seller's fee, netted from payout
+  const { buyerFeeCents, sellerFeeCents } = splitFee(deal.totalFeeCents);
   const txn = ctx.newTxnId();
   return nonZero([
     entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'release'),
-    entry(txn, bankAcct(deal.sellerId), h.amount - fee, deal.id, 'seller_payout'),
-    entry(txn, bankAcct(deal.buyerId), h.buyerCommitment, deal.id, 'buyer_commitment_return'),
-    entry(txn, PLATFORM_FEES, h.buyerFee + fee, deal.id, 'fees'),
+    entry(txn, bankAcct(deal.sellerId), h.amount - sellerFeeCents, deal.id, 'seller_payout'),
+    entry(txn, bankAcct(deal.buyerId), h.buyerDeposit - buyerFeeCents, deal.id, 'buyer_deposit_return'),
+    entry(txn, PLATFORM_FEES, buyerFeeCents + sellerFeeCents, deal.id, 'fees'),
   ]);
 }
 
@@ -84,48 +86,52 @@ function refundAllLedger(deal: Deal, ctx: Ctx): LedgerEntry[] {
   const txn = ctx.newTxnId();
   return nonZero([
     entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'refund'),
-    entry(txn, bankAcct(deal.buyerId), h.amount + h.buyerFee + h.buyerCommitment, deal.id, 'buyer_refund'),
+    entry(txn, bankAcct(deal.buyerId), h.amount + h.buyerDeposit, deal.id, 'buyer_refund'),
   ]);
 }
 
 function splitLedger(deal: Deal, ctx: Ctx): LedgerEntry[] {
+  // a split is a no-fault outcome: price 50/50, both deposits back whole, no fees
   const h = escrowHeld(deal);
   const buyerHalf = Math.floor(h.amount / 2);
   const sellerHalf = h.amount - buyerHalf;
   const txn = ctx.newTxnId();
   return nonZero([
     entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'split'),
-    entry(txn, bankAcct(deal.buyerId), buyerHalf + h.buyerFee + h.buyerCommitment, deal.id, 'buyer_split'),
+    entry(txn, bankAcct(deal.buyerId), buyerHalf + h.buyerDeposit, deal.id, 'buyer_split'),
     entry(txn, bankAcct(deal.sellerId), sellerHalf, deal.id, 'seller_split'),
   ]);
 }
 
 function noShowLedger(deal: Deal, noShow: Role, ctx: Ctx): LedgerEntry[] {
+  // no fees ever on a no-show — the flake's whole $5 deposit goes to the
+  // stood-up party, and the company keeps nothing
   const h = escrowHeld(deal);
   const txn = ctx.newTxnId();
   if (noShow === 'seller') {
-    // buyer fully refunded from escrow; the seller's commitment is collected off
-    // their card and routed to the buyer. The capture is its own zero-sum txn —
-    // that money was never in escrow, it moves seller bank -> buyer bank.
+    // buyer fully refunded from escrow (price + their deposit); the seller's
+    // deposit is collected off their card and routed to the buyer. The capture
+    // is its own zero-sum txn — that money was never in escrow, it moves
+    // seller bank -> buyer bank.
     const capture = ctx.newTxnId();
     return nonZero([
       entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'no_show'),
-      entry(txn, bankAcct(deal.buyerId), h.amount + h.buyerFee + h.buyerCommitment, deal.id, 'present_refund'),
-      entry(capture, bankAcct(deal.sellerId), -deal.commitmentCents, deal.id, 'commitment_capture'),
+      entry(txn, bankAcct(deal.buyerId), h.amount + h.buyerDeposit, deal.id, 'present_refund'),
+      entry(capture, bankAcct(deal.sellerId), -deal.commitmentCents, deal.id, 'deposit_capture'),
       entry(capture, bankAcct(deal.buyerId), deal.commitmentCents, deal.id, 'stood_up_compensation'),
     ]);
   }
-  // buyer no-show: price + prepaid fee return; the buyer's escrowed commitment
-  // goes to the stood-up seller, not the company
+  // buyer no-show: the price returns; the buyer's escrowed deposit goes to the
+  // stood-up seller, not the company
   return nonZero([
     entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'no_show'),
-    entry(txn, bankAcct(deal.buyerId), h.amount + h.buyerFee, deal.id, 'price_return'),
-    entry(txn, bankAcct(deal.sellerId), h.buyerCommitment, deal.id, 'stood_up_compensation'),
+    entry(txn, bankAcct(deal.buyerId), h.amount, deal.id, 'price_return'),
+    entry(txn, bankAcct(deal.sellerId), h.buyerDeposit, deal.id, 'stood_up_compensation'),
   ]);
 }
 
 /** Trust + rail effects for a no-show / back-out after heading out. Seller fault
- *  captures their card hold (to the buyer); buyer fault releases any seller hold. */
+ *  captures their $5 deposit hold (to the buyer); buyer fault releases any seller hold. */
 function faultEffects(deal: Deal, atFault: Role): SideEffect[] {
   const effects: SideEffect[] = [{ type: 'trust_delta', userId: userId(deal, atFault), delta: -6 }];
   if (atFault === 'seller') effects.push({ type: 'capture_seller_commitment', toUserId: deal.buyerId, amountCents: deal.commitmentCents });
@@ -170,7 +176,7 @@ function mutate(deal: Deal, patch: Partial<Deal>, event: DealEvent, effects: Sid
  *  When agreed, there's no fault party and no trust penalty. */
 function resolveDispute(deal: Deal, outcome: 'release' | 'refund' | 'split', ctx: Ctx, byAgreement: boolean, patchExtra: Partial<Deal> = {}): ApplyResult {
   const fault: Role | null = outcome === 'release' ? 'buyer' : outcome === 'refund' ? 'seller' : null;
-  const base = outcome === 'release' ? 'released to seller' : outcome === 'refund' ? 'refunded to buyer' : 'price split 50/50';
+  const base = outcome === 'release' ? 'released to seller' : outcome === 'refund' ? 'refunded to buyer' : 'price split 50/50, deposits returned';
   const note = byAgreement ? `Resolved by agreement — ${base}.` : `Resolved: ${base}.`;
   const ledger = outcome === 'release' ? releaseLedger(deal, ctx) : outcome === 'refund' ? refundAllLedger(deal, ctx) : splitLedger(deal, ctx);
   // dispute endings never capture the seller's commitment — any hold is released
@@ -193,14 +199,15 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
 
     case 'FUND': {
       // The buyer's money arms the deal directly — there is no seller stake turn.
-      // The seller's commitment is a card hold placed when they head out (HEAD_OUT).
-      const total = deal.amountCents + deal.feeCentsPerSide + deal.commitmentCents;
+      // Buyer escrows price + their $5 deposit; NO fee is prepaid (fees are netted
+      // at release). The seller's deposit is a card hold placed at HEAD_OUT.
+      const total = deal.amountCents + deal.commitmentCents;
       const txn = ctx.newTxnId();
       const ledger = nonZero([
         entry(txn, bankAcct(deal.buyerId), -total, deal.id, 'fund'),
         entry(txn, escrowAcct(deal.id), total, deal.id, 'fund'),
       ]);
-      return transition(deal, 'ARMED', ev(ctx, 'buyer', 'funded', `Funded ${usd(total)} into escrow — deal armed; no seller stake needed.`), { ledger });
+      return transition(deal, 'ARMED', ev(ctx, 'buyer', 'funded', `Funded ${usd(total)} into escrow (price + ${usd(deal.commitmentCents)} deposit) — deal armed; no seller stake needed.`), { ledger });
     }
 
     case 'SET_MEETUP': {
@@ -218,7 +225,7 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
       // Track WHO headed out so the other phone can show "they're heading over".
       // First head-out moves ARMED -> EN_ROUTE; the second party heading out just
       // flips their flag (no state change). The seller's FIRST head-out places the
-      // commitment hold on their card — captured only if they then no-show/back out.
+      // $5 deposit hold on their card — captured only if they then no-show/back out.
       const patch: Partial<Deal> = action.actor === 'buyer' ? { buyerHeadedOut: true } : { sellerHeadedOut: true };
       const event = ev(ctx, action.actor, 'heading_out', `${action.actor} is heading to the meetup.`);
       const effects: SideEffect[] =
@@ -336,10 +343,10 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
           ledger: refundAllLedger(deal, ctx),
         });
       }
-      // Once you've headed out, backing out is a no-show: you forfeit your commitment
+      // Once you've headed out, backing out is a no-show: you forfeit your $5 deposit
       // to the other side, who is made whole (same as EXPIRE_NO_SHOW, but self-declared).
       if (deal.state === 'EN_ROUTE') {
-        const note = `${action.actor} backed out after heading out and forfeited their commitment to the other party.`;
+        const note = `${action.actor} backed out after heading out and forfeited their ${usd(deal.commitmentCents)} deposit to the other party.`;
         return transition(deal, 'EXPIRED_NO_SHOW', ev(ctx, action.actor, 'backed_out', note), {
           ledger: noShowLedger(deal, action.actor, ctx),
           effects: faultEffects(deal, action.actor),
@@ -351,7 +358,7 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
 
     case 'EXPIRE_NO_SHOW': {
       const present = otherRole(action.noShow);
-      const note = `${action.noShow} never arrived. ${present} fully refunded; the no-show's commitment went to the ${present}.`;
+      const note = `${action.noShow} never arrived. ${present} fully refunded; the no-show's ${usd(deal.commitmentCents)} deposit went to the ${present}.`;
       return transition(deal, 'EXPIRED_NO_SHOW', ev(ctx, 'system', 'no_show', note), {
         ledger: noShowLedger(deal, action.noShow, ctx),
         effects: faultEffects(deal, action.noShow),

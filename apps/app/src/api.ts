@@ -28,8 +28,8 @@ export interface Deal {
   sellerId: string;
   itemDescription: string;
   amountCents: number;
-  feeCentsPerSide: number;
-  commitmentCents: number;
+  totalFeeCents: number; // whole-deal fee; the buyer/seller split is derived client-side
+  commitmentCents: number; // flat $5 deposit per side
   state: string;
   codeRevealed: boolean;
   buyerHeadedOut: boolean;

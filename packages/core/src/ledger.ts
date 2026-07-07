@@ -37,19 +37,18 @@ export function balanceOf(entries: LedgerEntry[], account: AccountRef): Cents {
 
 export interface Held {
   amount: Cents;
-  buyerFee: Cents;
-  buyerCommitment: Cents;
+  buyerDeposit: Cents;
 }
 
 /** What's currently in escrow for a deal, derived from its state. Only the buyer
- *  escrows money — the seller's commitment lives as a card hold, never in escrow. */
+ *  escrows money (price + their $5 deposit) — the seller's deposit lives as a
+ *  card hold, never in escrow. Fees are netted out at release, never pre-funded. */
 export function escrowHeld(deal: Deal): Held {
   const buyerHeld = ['FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state);
   return {
     amount: buyerHeld ? deal.amountCents : 0,
-    buyerFee: buyerHeld ? deal.feeCentsPerSide : 0,
-    buyerCommitment: buyerHeld ? deal.commitmentCents : 0,
+    buyerDeposit: buyerHeld ? deal.commitmentCents : 0,
   };
 }
 
-export const heldTotal = (h: Held): Cents => h.amount + h.buyerFee + h.buyerCommitment;
+export const heldTotal = (h: Held): Cents => h.amount + h.buyerDeposit;

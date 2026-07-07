@@ -60,7 +60,7 @@ const ok = (r: HandlerResult) => {
     const rows = (legs ?? []).map((l: any) => ({ txnId: '', account: l.account, amountCents: Number(l.amount_cents), dealId, memo: '' }));
     expect(rows.reduce((sum, e) => sum + e.amountCents, 0)).toBe(0); // whole deal nets 0
     expect(balanceOf(rows, escrowAcct(dealId))).toBe(0); // escrow drained
-    expect(balanceOf(rows, bankAcct(s.user.id))).toBe(300_00 - 4_00); // seller +$296
+    expect(balanceOf(rows, bankAcct(s.user.id))).toBe(300_00 - 8_00); // seller +$292 ($8 fee share of the $12 total)
 
     expect((await repo.getUser(b.user.id))!.completedDeals).toBe(1);
     expect((await repo.getUser(s.user.id))!.completedDeals).toBe(1);

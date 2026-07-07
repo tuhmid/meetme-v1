@@ -22,8 +22,8 @@ export interface Deal {
   useCase: UseCase;
   itemDescription: string;
   amountCents: Cents;
-  feeCentsPerSide: Cents; // locked at create
-  commitmentCents: Cents; // per side, locked at create
+  totalFeeCents: Cents; // TOTAL platform fee (both sides), locked at create; split via splitFee
+  commitmentCents: Cents; // flat $5 deposit per side, locked at create
   state: DealState;
   releaseCodeHash: string | null; // hash only; plaintext never stored
   codeRevealed: boolean;

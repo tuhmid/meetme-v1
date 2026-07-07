@@ -220,8 +220,8 @@ export default function AccountScreen() {
             </Accordion>
             <Accordion title="Terms summary">
               <Text style={bullet}>• MeetMe holds the buyer's payment in escrow; the seller is paid only after both sides confirm the handoff.</Text>
-              <Text style={bullet}>• Both sides commit to showing up. Head out and then bail — or never show — and you forfeit your commitment to the person you stood up, not to MeetMe.</Text>
-              <Text style={bullet}>• Sellers never pay upfront: a card on file, with a small hold placed only at head-out.</Text>
+              <Text style={bullet}>• Both sides put up a $5 deposit to show up. Head out and then bail — or never show — and it goes to the person you stood up, not to MeetMe.</Text>
+              <Text style={bullet}>• Sellers never pay upfront: a card on file, with a $5 hold placed only at head-out.</Text>
               <Text style={bullet}>• Disputes freeze the funds until both parties agree on an outcome or a specialist decides.</Text>
               <Text style={bullet}>• One account per phone number. US only for now.</Text>
               <Text style={[bullet, { marginBottom: 0 }]}>• Test mode: all money movement is simulated — no real charges.</Text>
