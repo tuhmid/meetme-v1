@@ -60,9 +60,18 @@ whenever we take a shortcut. (Also mirrored in project memory.)
   for the support/admin console (fires RESOLVE_DISPUTE as `admin`). Self-service
   resolution (both parties agree → auto-resolve) and a real admin console are
   deferred. Evidence attachments (photos) on statements also deferred.
-- **Rating comments + history + profile screen** — M9 added star ratings + a
-  reputation line on the deal; free-text comments, a rating history, and a real
-  profile screen are still deferred.
+- **Rating comments + history** — M9 added star ratings + a reputation line on the
+  deal, and profile screens now exist (counterparty profile card + your own Account
+  tab); free-text rating comments and a rating history are still deferred.
+- **Theme toggle is a dev affordance** — the Account screen's "Polish | Trust"
+  segmented control exists to compare the two looks live; remove or gate it once a
+  final color direction is chosen.
+- **`@gorhom/bottom-sheet` is installed but unused** — sheets use the custom
+  Reanimated `SpringSheet` (in `src/app/components.tsx`) instead; drop the dependency
+  or migrate to it deliberately.
+- **Metro prints an expo-router warning at start** — Expo misdetects `src/app/` as an
+  expo-router directory (we use React Navigation, not expo-router). Harmless; rename
+  the folder or configure it away if it bothers anyone.
 
 ## Fixed (no longer placeholders)
 - ~~Hardcoded $300 / "iPhone 12"~~ — deals take item + price inputs (2026-07-02).
@@ -91,13 +100,16 @@ whenever we take a shortcut. (Also mirrored in project memory.)
 - ~~No ratings~~ — star ratings after a completed deal + a counterparty reputation
   line (trust score / deal count) on the deal screen (M9).
 - ~~Can't back out / cancel~~ — Cancel/back-out on the deal screen: **free full
-  refund before heading out; forfeit your commitment after** (self-declared no-show).
+  refund before heading out; forfeit your $5 deposit after** (self-declared no-show).
   See `docs/deal-rules.md`.
 - ~~Can't decline an invite~~ — Decline button on invite cards (invitee dismisses;
   inviter can rescind).
 - ~~No dispute self-resolution~~ — both parties can propose an outcome; matching
   proposals auto-resolve by agreement (no admin). Admin/dev endpoint remains the
   fallback.
+- ~~Single-screen shell~~ — the app is now a real navigation tree (React Navigation:
+  auth switch → Deals/Account tabs, Home→Deal stack), with an Account screen (profile,
+  card on file, ID verify, blocked list) and the card-on-file seller flow in the UI.
 
 ## Safety layer (in progress)
 - **Meetup spot** ✅ — fair-by-time midpoint finder (Geoapify Places near the midpoint,
@@ -131,5 +143,8 @@ whenever we take a shortcut. (Also mirrored in project memory.)
   KYC partner does ID verification for real. Threshold ($500) is tunable.
 - **No in-app account deletion** — an App Store requirement before public launch.
   The Account screen's "Delete account" row is a "contact support" placeholder for now.
+- **Release code is a 4-digit unsalted SHA-256 hash** — fine for the demo (single-use,
+  short-lived, server-verified), but production should salt/pepper per deal
+  (`makeServerCtx` in `packages/server/src/ctx.ts` notes this).
 
 > Note: US-only phone format (`+1`) for now — international numbers are a later concern.
