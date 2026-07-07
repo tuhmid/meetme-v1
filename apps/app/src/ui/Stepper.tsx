@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { Text, View } from 'react-native';
+import Animated, { Easing, FadeIn, ZoomIn, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 
@@ -10,6 +12,29 @@ export interface StepperProps {
 
 const NODE = 26;
 
+/** Connector segment whose primary fill sweeps in when its side of the gap is reached. */
+function Connector({ reached, hidden }: { reached: boolean; hidden: boolean }) {
+  const theme = useTheme();
+  const reduceMotion = useReducedMotion();
+  const { colors, motion } = theme;
+  const progress = useSharedValue(reached ? 1 : 0);
+
+  useEffect(() => {
+    const target = reached ? 1 : 0;
+    progress.value = reduceMotion
+      ? target
+      : withTiming(target, { duration: motion.duration.slow, easing: Easing.bezier(...motion.easing.standard) });
+  }, [reached, reduceMotion, progress, motion]);
+
+  const fill = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` as `${number}%` }));
+
+  return (
+    <View style={{ flex: 1, height: 2, backgroundColor: hidden ? 'transparent' : colors.border, overflow: 'hidden' }}>
+      {!hidden && <Animated.View style={[{ height: 2, backgroundColor: colors.primary }, fill]} />}
+    </View>
+  );
+}
+
 /**
  * Horizontal progress stepper: completed = filled primary + check, current =
  * primary ring (hollow), upcoming = hollow border circle. The connector between
@@ -17,7 +42,8 @@ const NODE = 26;
  */
 export function Stepper({ steps, current }: StepperProps) {
   const theme = useTheme();
-  const { colors, type, spacing } = theme;
+  const reduceMotion = useReducedMotion();
+  const { colors, type, spacing, motion } = theme;
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
@@ -29,48 +55,49 @@ export function Stepper({ steps, current }: StepperProps) {
         const leftReached = i <= current;
         const rightReached = i < current;
 
+        const node = (
+          <View
+            style={{
+              width: NODE,
+              height: NODE,
+              borderRadius: NODE / 2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: completed ? colors.primary : colors.surface,
+              borderWidth: active ? 3 : completed ? 0 : 1.5,
+              borderColor: active ? colors.primary : colors.border,
+            }}
+          >
+            {completed ? (
+              <Ionicons name="checkmark" size={15} color={colors.onPrimary} />
+            ) : active ? (
+              <View
+                style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary }}
+              />
+            ) : null}
+          </View>
+        );
+
         return (
           <View key={`${label}-${i}`} style={{ flex: 1, alignItems: 'center' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
-              {/* left connector */}
-              <View
-                style={{
-                  flex: 1,
-                  height: 2,
-                  backgroundColor: i === 0 ? 'transparent' : leftReached ? colors.primary : colors.border,
-                }}
-              />
+              <Connector reached={leftReached} hidden={i === 0} />
 
-              {/* node */}
-              <View
-                style={{
-                  width: NODE,
-                  height: NODE,
-                  borderRadius: NODE / 2,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: completed ? colors.primary : colors.surface,
-                  borderWidth: active ? 3 : completed ? 0 : 1.5,
-                  borderColor: active ? colors.primary : colors.border,
-                }}
-              >
-                {completed ? (
-                  <Ionicons name="checkmark" size={15} color={colors.onPrimary} />
-                ) : active ? (
-                  <View
-                    style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary }}
-                  />
-                ) : null}
-              </View>
+              {active ? (
+                // keyed on `current` so the ring pops once whenever the step advances
+                <Animated.View
+                  key={`node-${current}`}
+                  entering={reduceMotion
+                    ? FadeIn.duration(motion.duration.base)
+                    : ZoomIn.springify().damping(motion.spring.damping)}
+                >
+                  {node}
+                </Animated.View>
+              ) : (
+                node
+              )}
 
-              {/* right connector */}
-              <View
-                style={{
-                  flex: 1,
-                  height: 2,
-                  backgroundColor: i === steps.length - 1 ? 'transparent' : rightReached ? colors.primary : colors.border,
-                }}
-              />
+              <Connector reached={rightReached} hidden={i === steps.length - 1} />
             </View>
 
             <Text

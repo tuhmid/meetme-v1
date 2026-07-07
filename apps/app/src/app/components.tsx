@@ -1,5 +1,7 @@
 // Small shared pieces that predate the UI kit — used by the Home and Deal screens.
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import type { Role, UserProfile } from '../api';
 import { useTheme } from '../theme';
@@ -23,7 +25,10 @@ export function RoleBar({ viewAs, users, onToggle }: { viewAs: Role; users: Demo
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.colors.text, borderRadius: 10, padding: 10, marginBottom: 12 }}>
       <Text style={{ color: theme.colors.surface }}>Viewing as <Text style={{ fontWeight: '800' }}>{me.name} ({viewAs})</Text></Text>
-      <Pressable onPress={onToggle} style={{ backgroundColor: theme.colors.primary, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 }}>
+      <Pressable
+        onPress={() => { void Haptics.selectionAsync().catch(() => {}); onToggle(); }}
+        style={{ backgroundColor: theme.colors.primary, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 }}
+      >
         <Text style={{ color: theme.colors.onPrimary, fontSize: 12 }}>View as {other.name.split(' ')[0]} ⇄</Text>
       </Pressable>
     </View>
@@ -92,6 +97,8 @@ export function ProfileModal({ visible, loading, profile, onClose, onReportBlock
             </View>
           ) : (
             <ScrollView keyboardShouldPersistTaps="handled">
+              {/* fade the profile in once it has loaded */}
+              <Animated.View entering={FadeIn.duration(theme.motion.duration.base)}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                 <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: profile.avatarColor, alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={{ color: theme.colors.surface, fontSize: 22, fontWeight: '800' }}>{initial}</Text>
@@ -145,6 +152,7 @@ export function ProfileModal({ visible, loading, profile, onClose, onReportBlock
               </Pressable>
               <View style={{ height: 12 }} />
               <Button label="Close" onPress={onClose} />
+              </Animated.View>
             </ScrollView>
           )}
         </View>

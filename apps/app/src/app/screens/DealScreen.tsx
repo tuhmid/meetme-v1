@@ -1,6 +1,7 @@
 // One deal from draft to done: escrow status, actions, meetup, chat, disputes.
 import { useCallback } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn, useReducedMotion } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -15,6 +16,12 @@ import { formatMoney, FUNDED_STATES, iconFor, inputStyle, labelFor, nextActions,
 export default function DealScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
+  const reduceMotion = useReducedMotion();
+  const { duration, spring } = theme.motion;
+  // staggered section entrance; plain fade when the user prefers reduced motion
+  const enterSection = (i: number) =>
+    reduceMotion ? FadeIn.duration(duration.base).delay(i * 45) : FadeInDown.duration(duration.base).delay(i * 45);
+  const crossfade = FadeIn.duration(duration.base);
   const {
     session, demo, viewAs, setViewAs, logout,
     banner, setBanner, err, busy,
@@ -82,9 +89,15 @@ export default function DealScreen() {
 
           <View style={{ marginBottom: 12, alignItems: 'flex-start' }}><ThemeToggle /></View>
           {!!banner && (
-            <Pressable onPress={() => setBanner('')} style={{ marginBottom: 10 }}>
-              <Callout tone="primary" title={banner} />
-            </Pressable>
+            <Animated.View
+              entering={reduceMotion ? FadeIn.duration(duration.base) : FadeInDown.duration(duration.base)}
+              exiting={FadeOut.duration(duration.fast)}
+              style={{ marginBottom: 10 }}
+            >
+              <Pressable onPress={() => setBanner('')}>
+                <Callout tone="primary" title={banner} />
+              </Pressable>
+            </Animated.View>
           )}
           {!!err && <Text style={{ color: theme.colors.danger, marginVertical: 8 }}>{err}</Text>}
 
@@ -112,69 +125,89 @@ export default function DealScreen() {
               <>
             <Pressable onPress={() => navigation.goBack()}><Text style={{ color: theme.colors.primary, marginBottom: 10 }}>← My deals</Text></Pressable>
 
-            <DealCard
-              item={deal.itemDescription}
-              amountCents={deal.amountCents}
-              tag={deal.state === 'RELEASED' ? 'RELEASED' : 'ESCROW'}
-              metaLine={deal.meetupName ?? 'No meetup spot yet'}
-              people={{ a: meName, b: oName, label: `You & ${oFirst}`, aColor: theme.colors[role], bColor: theme.colors[other] }}
-              // no star rating here: trustScore isn't a star average — the honest
-              // "trust N/100 · N deals" line below covers reputation until we
-              // aggregate real per-user star ratings.
-            />
+            <Animated.View entering={enterSection(0)}>
+              <DealCard
+                item={deal.itemDescription}
+                amountCents={deal.amountCents}
+                tag={deal.state === 'RELEASED' ? 'RELEASED' : 'ESCROW'}
+                metaLine={deal.meetupName ?? 'No meetup spot yet'}
+                people={{ a: meName, b: oName, label: `You & ${oFirst}`, aColor: theme.colors[role], bColor: theme.colors[other] }}
+                // no star rating here: trustScore isn't a star average — the honest
+                // "trust N/100 · N deals" line below covers reputation until we
+                // aggregate real per-user star ratings.
+              />
+            </Animated.View>
 
-            <Pressable onPress={openProfile} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 14 }} hitSlop={8}>
-              <Ionicons name="star" size={14} color={theme.colors.star} />
-              <Text style={{ color: theme.colors.textDim, marginLeft: 5, flex: 1 }}>{oName} · trust {oTrust ?? '—'}/100 · {oDeals} deal{oDeals === 1 ? '' : 's'}</Text>
-              <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
-            </Pressable>
+            <Animated.View entering={enterSection(1)}>
+              <Pressable onPress={openProfile} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 14 }} hitSlop={8}>
+                <Ionicons name="star" size={14} color={theme.colors.star} />
+                <Text style={{ color: theme.colors.textDim, marginLeft: 5, flex: 1 }}>{oName} · trust {oTrust ?? '—'}/100 · {oDeals} deal{oDeals === 1 ? '' : 's'}</Text>
+                <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
+              </Pressable>
+            </Animated.View>
 
             {stepIndex !== undefined && (
-              <View style={{ marginBottom: 14 }}>
+              <Animated.View entering={enterSection(2)} style={{ marginBottom: 14 }}>
                 <Stepper steps={['Agree', 'Fund', 'Commit', 'Meet', 'Done']} current={stepIndex} />
-              </View>
+              </Animated.View>
             )}
 
             {!hideTrustBanner && (
-              <Pressable onPress={() => setShowTrust(true)}>
-                {released || FUNDED_STATES.includes(deal.state) ? (
-                  <TrustBanner amountCents={deal.amountCents} released={released} />
-                ) : (
-                  // pre-funding: nothing is held yet — speak in the future tense
-                  <TrustBanner
-                    amountCents={deal.amountCents}
-                    title="Escrow protection"
-                    subtitle={`${formatMoney(deal.amountCents)} will be held by MeetMe until you both confirm the handoff.`}
-                  />
-                )}
-              </Pressable>
+              <Animated.View entering={enterSection(3)}>
+                <Pressable onPress={() => setShowTrust(true)}>
+                  {/* keyed on state so the held → released swap crossfades */}
+                  <Animated.View key={deal.state} entering={crossfade}>
+                    {released || FUNDED_STATES.includes(deal.state) ? (
+                      <TrustBanner amountCents={deal.amountCents} released={released} />
+                    ) : (
+                      // pre-funding: nothing is held yet — speak in the future tense
+                      <TrustBanner
+                        amountCents={deal.amountCents}
+                        title="Escrow protection"
+                        subtitle={`${formatMoney(deal.amountCents)} will be held by MeetMe until you both confirm the handoff.`}
+                      />
+                    )}
+                  </Animated.View>
+                </Pressable>
+              </Animated.View>
             )}
 
             {(FUNDED_STATES.includes(deal.state) || !!deal.meetupName) && (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                {FUNDED_STATES.includes(deal.state) && <Badge label="Escrow funded" tone="success" iconName="lock-closed" />}
-                {!!deal.meetupName && (deal.meetupCustom
-                  ? <Badge label="Custom spot" tone="warning" iconName="alert-circle" />
-                  : <Badge label="Safe spot set" tone="primary" iconName="shield-checkmark" />)}
-              </View>
+              <Animated.View entering={enterSection(4)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                {FUNDED_STATES.includes(deal.state) && (
+                  <Animated.View entering={FadeIn.duration(duration.fast)}>
+                    <Badge label="Escrow funded" tone="success" iconName="lock-closed" />
+                  </Animated.View>
+                )}
+                {!!deal.meetupName && (
+                  <Animated.View entering={FadeIn.duration(duration.fast).delay(30)}>
+                    {deal.meetupCustom
+                      ? <Badge label="Custom spot" tone="warning" iconName="alert-circle" />
+                      : <Badge label="Safe spot set" tone="primary" iconName="shield-checkmark" />}
+                  </Animated.View>
+                )}
+              </Animated.View>
             )}
 
             {guidance && (
-              <View style={{ marginTop: 12 }}>
-                <Callout tone={guidance.tone} kicker={guidance.kicker} title={guidance.title} body={guidance.body} />
-              </View>
+              <Animated.View entering={enterSection(5)} style={{ marginTop: 12 }}>
+                {/* keyed on state so new guidance crossfades in */}
+                <Animated.View key={deal.state} entering={crossfade}>
+                  <Callout tone={guidance.tone} kicker={guidance.kicker} title={guidance.title} body={guidance.body} />
+                </Animated.View>
+              </Animated.View>
             )}
 
             {actions.length > 0 && (
-              <View style={{ marginTop: 12, gap: 8 }}>
+              <Animated.View entering={enterSection(6)} style={{ marginTop: 12, gap: 8 }}>
                 {actions.map((a, i) => (
                   <Button key={i} label={labelFor(a, deal)} iconName={iconFor(a)} onPress={() => act(a)} />
                 ))}
-              </View>
+              </Animated.View>
             )}
 
             {canSetSpot && (
-              <View style={{ marginTop: 16 }}>
+              <Animated.View entering={enterSection(7)} style={{ marginTop: 16 }}>
                 <SectionLabel>Meetup spot</SectionLabel>
                 <MeetupField
                   selected={deal.meetupName ?? undefined}
@@ -182,11 +215,11 @@ export default function DealScreen() {
                   onPressSelected={openMeetup}
                   onSearch={openMeetup}
                 />
-              </View>
+              </Animated.View>
             )}
 
             {(deal.state === 'EN_ROUTE' || deal.state === 'AT_MEETUP') && (
-              <View style={{ marginTop: 14, gap: 10 }}>
+              <Animated.View entering={enterSection(8)} style={{ marginTop: 14, gap: 10 }}>
                 <PresenceCard
                   live
                   you={{
@@ -218,20 +251,27 @@ export default function DealScreen() {
                     )}
                   </>
                 )}
-              </View>
+              </Animated.View>
             )}
 
             {deal.state === 'AT_MEETUP' && role === 'buyer' && deal.codeRevealed && (
-              <Card style={{ marginTop: 14, alignItems: 'center' }}>
-                <Text style={{ fontSize: theme.type.size.xxl, fontWeight: theme.type.weight.bold, letterSpacing: 6, color: theme.colors.primary, textAlign: 'center' }}>{code || '••••'}</Text>
-                <Text style={{ color: theme.colors.textMuted, fontSize: theme.type.size.xs, marginTop: 8, textAlign: 'center' }}>Show this to the seller — don't text it.</Text>
-              </Card>
+              <Animated.View
+                // the ta-da moment — a soft spring pop when the code appears
+                entering={reduceMotion
+                  ? FadeIn.duration(duration.base)
+                  : ZoomIn.springify().damping(spring.damping).stiffness(spring.stiffness).mass(spring.mass)}
+              >
+                <Card style={{ marginTop: 14, alignItems: 'center' }}>
+                  <Text style={{ fontSize: theme.type.size.xxl, fontWeight: theme.type.weight.bold, letterSpacing: 6, color: theme.colors.primary, textAlign: 'center' }}>{code || '••••'}</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: theme.type.size.xs, marginTop: 8, textAlign: 'center' }}>Show this to the seller — don't text it.</Text>
+                </Card>
+              </Animated.View>
             )}
             {deal.state === 'AT_MEETUP' && role === 'seller' && (
-              <View style={{ marginTop: 14 }}>
+              <Animated.View entering={enterSection(8)} style={{ marginTop: 14 }}>
                 <TextInput value={code} onChangeText={setCode} placeholder="release code" keyboardType="number-pad" style={inputStyle(theme)} />
                 <Button label="Verify code" iconName="key" onPress={() => act({ type: 'ENTER_CODE', code })} />
-              </View>
+              </Animated.View>
             )}
 
             {deal.state === 'DISPUTED' && (
@@ -270,9 +310,10 @@ export default function DealScreen() {
             )}
 
             {outcome && (
-              <View style={{ marginTop: 14 }}>
+              // keyed on state so the outcome crossfades in when it lands
+              <Animated.View key={deal.state} entering={crossfade} style={{ marginTop: 14 }}>
                 <Callout tone={outcome.tone} kicker={outcome.kicker} title={outcome.title} body={outcome.body} />
-              </View>
+              </Animated.View>
             )}
 
             {released && (
@@ -289,7 +330,7 @@ export default function DealScreen() {
             )}
 
             {['AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
-              <View style={{ marginTop: 20 }}>
+              <Animated.View entering={enterSection(9)} style={{ marginTop: 20 }}>
                 <SectionLabel>Chat</SectionLabel>
                 <Card padded={false} style={{ padding: 10 }}>
                   {messages.length === 0 ? (
@@ -298,9 +339,9 @@ export default function DealScreen() {
                     messages.map((m, i) => {
                       const mine = m.senderId === myId();
                       return (
-                        <View key={i} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', backgroundColor: mine ? theme.colors.primary : theme.colors.surfaceAlt, borderRadius: theme.radius.md, paddingHorizontal: 12, paddingVertical: 7, marginVertical: 3, maxWidth: '82%' }}>
+                        <Animated.View key={i} entering={reduceMotion ? FadeIn.duration(duration.fast) : FadeInDown.duration(duration.fast)} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', backgroundColor: mine ? theme.colors.primary : theme.colors.surfaceAlt, borderRadius: theme.radius.md, paddingHorizontal: 12, paddingVertical: 7, marginVertical: 3, maxWidth: '82%' }}>
                           <Text style={{ color: mine ? theme.colors.onPrimary : theme.colors.text }}>{m.body}</Text>
-                        </View>
+                        </Animated.View>
                       );
                     })
                   )}
@@ -311,28 +352,36 @@ export default function DealScreen() {
                     <Ionicons name="send" size={18} color={theme.colors.onPrimary} />
                   </Pressable>
                 </View>
-              </View>
+              </Animated.View>
             )}
 
             {['DRAFT', 'AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE'].includes(deal.state) && (
-              <Button variant="dangerGhost" label={cancelLabel} onPress={cancelDeal} style={{ marginTop: 18 }} />
+              <Animated.View entering={enterSection(10)}>
+                <Button variant="dangerGhost" label={cancelLabel} onPress={cancelDeal} style={{ marginTop: 18 }} />
+              </Animated.View>
             )}
 
             {['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(deal.state) && (
-              <Button variant="dangerGhost" iconName="shield" label="Feel unsafe? Leave safely" onPress={leaveSafely} style={{ marginTop: 10 }} />
+              <Animated.View entering={enterSection(10)}>
+                <Button variant="dangerGhost" iconName="shield" label="Feel unsafe? Leave safely" onPress={leaveSafely} style={{ marginTop: 10 }} />
+              </Animated.View>
             )}
 
             {['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(deal.state) && (
-              <Pressable onPress={openDispute} style={{ marginTop: 14 }}>
-                <Text style={{ color: theme.colors.danger, textAlign: 'center' }}>Something wrong? Report a problem</Text>
-              </Pressable>
+              <Animated.View entering={enterSection(10)}>
+                <Pressable onPress={openDispute} style={{ marginTop: 14 }}>
+                  <Text style={{ color: theme.colors.danger, textAlign: 'center' }}>Something wrong? Report a problem</Text>
+                </Pressable>
+              </Animated.View>
             )}
 
             {['AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
-              <Pressable onPress={reportOrBlock} style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="flag-outline" size={14} color={theme.colors.textMuted} />
-                <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginLeft: 5 }}>Report or block {theirName()}</Text>
-              </Pressable>
+              <Animated.View entering={enterSection(10)}>
+                <Pressable onPress={reportOrBlock} style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                  <Ionicons name="flag-outline" size={14} color={theme.colors.textMuted} />
+                  <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginLeft: 5 }}>Report or block {theirName()}</Text>
+                </Pressable>
+              </Animated.View>
             )}
 
             <SectionLabel style={{ marginTop: 22 }}>Money</SectionLabel>

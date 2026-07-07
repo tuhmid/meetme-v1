@@ -1,6 +1,7 @@
 // Deals list + invites + the start-a-deal form.
 import { useCallback } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, FadeOut, useReducedMotion } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -12,6 +13,11 @@ import { centsFromInput, formatMoney, formatPhone, inputStyle } from '../dealLog
 
 export default function HomeScreen() {
   const theme = useTheme();
+  const reduceMotion = useReducedMotion();
+  const { duration } = theme.motion;
+  // staggered section entrance; plain fade when the user prefers reduced motion
+  const enterSection = (i: number) =>
+    reduceMotion ? FadeIn.duration(duration.base).delay(i * 45) : FadeInDown.duration(duration.base).delay(i * 45);
   const {
     session, demo, viewAs, setViewAs, logout,
     banner, setBanner, err,
@@ -55,31 +61,43 @@ export default function HomeScreen() {
 
           <View style={{ marginBottom: 12, alignItems: 'flex-start' }}><ThemeToggle /></View>
           {!!banner && (
-            <Pressable onPress={() => setBanner('')} style={{ marginBottom: 10 }}>
-              <Callout tone="primary" title={banner} />
-            </Pressable>
+            <Animated.View
+              entering={reduceMotion ? FadeIn.duration(duration.base) : FadeInDown.duration(duration.base)}
+              exiting={FadeOut.duration(duration.fast)}
+              style={{ marginBottom: 10 }}
+            >
+              <Pressable onPress={() => setBanner('')}>
+                <Callout tone="primary" title={banner} />
+              </Pressable>
+            </Animated.View>
           )}
           {!!err && <Text style={{ color: theme.colors.danger, marginVertical: 8 }}>{err}</Text>}
 
           {session && invites.length > 0 && (
             <>
-              <SectionLabel style={{ marginTop: 6 }}>Invites for you</SectionLabel>
-              {invites.map((iv) => (
-                <Card key={iv.token} style={{ marginBottom: 10 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <Text numberOfLines={1} style={{ flex: 1, fontWeight: '700', fontSize: 16, color: theme.colors.text, marginRight: 10 }}>{iv.itemDescription}</Text>
-                    <Text style={{ fontWeight: '700', fontSize: 16, color: theme.colors.text }}>{formatMoney(iv.amountCents)}</Text>
-                  </View>
-                  <Text style={{ color: theme.colors.textDim, marginTop: 3, fontSize: 13 }}>from {iv.inviterName} · you'd be the {iv.yourRole}</Text>
-                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                    <View style={{ flex: 1 }}><Button label="Accept" onPress={() => acceptInvite(iv.token)} /></View>
-                    <View style={{ flex: 1 }}><Button variant="secondary" label="Decline" onPress={() => declineInvite(iv.token)} /></View>
-                  </View>
-                </Card>
+              <Animated.View entering={enterSection(0)}>
+                <SectionLabel style={{ marginTop: 6 }}>Invites for you</SectionLabel>
+              </Animated.View>
+              {invites.map((iv, i) => (
+                // keyed by token so a freshly arrived invite animates in on its own
+                <Animated.View key={iv.token} entering={enterSection(i)}>
+                  <Card style={{ marginBottom: 10 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <Text numberOfLines={1} style={{ flex: 1, fontWeight: '700', fontSize: 16, color: theme.colors.text, marginRight: 10 }}>{iv.itemDescription}</Text>
+                      <Text style={{ fontWeight: '700', fontSize: 16, color: theme.colors.text }}>{formatMoney(iv.amountCents)}</Text>
+                    </View>
+                    <Text style={{ color: theme.colors.textDim, marginTop: 3, fontSize: 13 }}>from {iv.inviterName} · you'd be the {iv.yourRole}</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                      <View style={{ flex: 1 }}><Button label="Accept" onPress={() => acceptInvite(iv.token)} /></View>
+                      <View style={{ flex: 1 }}><Button variant="secondary" label="Decline" onPress={() => declineInvite(iv.token)} /></View>
+                    </View>
+                  </Card>
+                </Animated.View>
               ))}
             </>
           )}
 
+          <Animated.View entering={enterSection(1)}>
           <SectionLabel style={{ marginTop: 14 }}>Start a deal</SectionLabel>
           <Card>
             <TextInput value={item} onChangeText={setItem} placeholder="Item (e.g. iPhone 12, 128GB)" style={inputStyle(theme)} />
@@ -98,7 +116,9 @@ export default function HomeScreen() {
               <Button label={dealValid() ? `Create deal (${formatMoney(amountCents)})` : 'Create deal'} disabled={!dealValid()} onPress={newDeal} style={{ marginTop: 4 }} />
             )}
           </Card>
+          </Animated.View>
 
+          <Animated.View entering={enterSection(2)}>
           <SectionLabel style={{ marginTop: 20 }}>Your deals</SectionLabel>
           {deals.length === 0 && invites.length === 0 && (
             <Callout kicker="Get started" title="No deals yet" body="Invite someone above — money is held in escrow and only released when you both confirm the handoff." />
@@ -135,6 +155,7 @@ export default function HomeScreen() {
             </Card>
           )}
           {session && <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 10 }}>Tip: swipe a draft deal left to delete it.</Text>}
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

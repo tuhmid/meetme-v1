@@ -1,4 +1,6 @@
 import { Text, View } from 'react-native';
+import { MotiView } from 'moti';
+import { useReducedMotion } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { withAlpha } from './_internal';
@@ -98,7 +100,9 @@ function RouteBand({ you, them }: { you: Party; them: Party }) {
  */
 export function PresenceCard({ live, you, them, showRoute }: PresenceCardProps) {
   const theme = useTheme();
-  const { colors, radius, spacing, type, shadow } = theme;
+  const reduceMotion = useReducedMotion();
+  const { colors, radius, spacing, type, shadow, motion } = theme;
+  const liveDot = { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success } as const;
 
   return (
     <View
@@ -116,7 +120,17 @@ export function PresenceCard({ live, you, them, showRoute }: PresenceCardProps) 
     >
       {live ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success }} />
+          {reduceMotion ? (
+            <View style={liveDot} />
+          ) : (
+            <MotiView
+              from={{ opacity: 1 }}
+              animate={{ opacity: 0.45 }}
+              // fast × 5 each way ≈ a 1.6s breathing loop
+              transition={{ type: 'timing', duration: motion.duration.fast * 5, loop: true }}
+              style={liveDot}
+            />
+          )}
           <Text
             style={{
               color: colors.success,

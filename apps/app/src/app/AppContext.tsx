@@ -8,6 +8,7 @@
 //    login, polling). Handy for testing without two phones.
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Linking, Platform } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { api, type Action, type Deal, type Invite, type MeetupSpot, type Role, type Transfer, type UserProfile } from '../api';
 import { supabase } from '../supabase';
@@ -274,10 +275,29 @@ function useAppState() {
     } catch { /* transient */ }
   };
 
+  // fire-and-forget feedback after a successful action — never blocks the flow
+  const actionHaptic = (type: Action['type']) => {
+    switch (type) {
+      case 'FUND': case 'POST_STAKE': case 'HEAD_OUT': case 'ARRIVE':
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        break;
+      case 'ENTER_CODE': case 'CONFIRM_RECEIVED':
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        break;
+      case 'OPEN_DISPUTE':
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+        break;
+      case 'RATE':
+        void Haptics.selectionAsync().catch(() => {});
+        break;
+    }
+  };
+
   const act = (action: Action) =>
     run(async () => {
       const res = await api.act(bearer(), dealId!, action);
       if (res.secret) setCode(res.secret.releaseCode); // minted at REVEAL_CODE, buyer-only
+      actionHaptic(action.type);
       await pullDeal(bearer(), dealId!);
     });
 
@@ -347,6 +367,7 @@ function useAppState() {
     Alert.alert('Feel unsafe?', 'Get to a safe place first. You can call 911, or quietly leave this meetup and report it.', [
       { text: 'Call 911', style: 'destructive', onPress: () => Linking.openURL('tel:911') },
       { text: 'Leave & report', onPress: () => run(async () => {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
         try { await api.reportUser(bearer(), theirId(), 'safety', dealId!); } catch {}
         // Before the meetup, back out (normal refund/forfeit rules). Once funds are in
         // play at the meetup, freeze them by opening a dispute for review instead.
