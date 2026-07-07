@@ -1,0 +1,142 @@
+// Deals list + invites + the start-a-deal form.
+import { useCallback } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useFocusEffect } from '@react-navigation/native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { ThemeToggle, useTheme } from '../../theme';
+import { Button, Callout, Card, DealHistoryRow, SectionLabel } from '../../ui';
+import { useApp } from '../AppContext';
+import { RoleBar, RolePick } from '../components';
+import { centsFromInput, formatMoney, formatPhone, inputStyle } from '../dealLogic';
+
+export default function HomeScreen() {
+  const theme = useTheme();
+  const {
+    session, demo, viewAs, setViewAs, logout,
+    banner, setBanner, err,
+    deals, invites, loadHome, pollHome, openDeal, deleteDraft,
+    acceptInvite, declineInvite,
+    item, setItem, amountCents, setAmountCents, cpPhone, setCpPhone,
+    inviteRole, setInviteRole, dealValid, inviteValid, newDeal, inviteSomeone,
+  } = useApp();
+
+  // initial load — was gated on `phase === 'home'`
+  useFocusEffect(
+    useCallback(() => {
+      if (session || demo) loadHome();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [viewAs, session, demo])
+  );
+
+  // keep the home lists (deals + incoming invites) fresh without a manual reload
+  useFocusEffect(
+    useCallback(() => {
+      if (!(session || demo)) return;
+      const t = setInterval(pollHome, 4000);
+      return () => clearInterval(t);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [session, demo, viewAs])
+  );
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg }}>
+      <StatusBar style="dark" />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 6, paddingBottom: 34 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+          {session ? (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.colors.text, borderRadius: 10, padding: 10, marginBottom: 12 }}>
+              <Text style={{ color: theme.colors.surface }}>Signed in as <Text style={{ fontWeight: '800' }}>{session.name}</Text></Text>
+              <Pressable onPress={logout}><Text style={{ color: theme.colors.danger, fontSize: 12 }}>Log out</Text></Pressable>
+            </View>
+          ) : (
+            demo && <RoleBar viewAs={viewAs} users={demo} onToggle={() => setViewAs((r) => (r === 'buyer' ? 'seller' : 'buyer'))} />
+          )}
+
+          <View style={{ marginBottom: 12, alignItems: 'flex-start' }}><ThemeToggle /></View>
+          {!!banner && (
+            <Pressable onPress={() => setBanner('')} style={{ marginBottom: 10 }}>
+              <Callout tone="primary" title={banner} />
+            </Pressable>
+          )}
+          {!!err && <Text style={{ color: theme.colors.danger, marginVertical: 8 }}>{err}</Text>}
+
+          {session && invites.length > 0 && (
+            <>
+              <SectionLabel style={{ marginTop: 6 }}>Invites for you</SectionLabel>
+              {invites.map((iv) => (
+                <Card key={iv.token} style={{ marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Text numberOfLines={1} style={{ flex: 1, fontWeight: '700', fontSize: 16, color: theme.colors.text, marginRight: 10 }}>{iv.itemDescription}</Text>
+                    <Text style={{ fontWeight: '700', fontSize: 16, color: theme.colors.text }}>{formatMoney(iv.amountCents)}</Text>
+                  </View>
+                  <Text style={{ color: theme.colors.textDim, marginTop: 3, fontSize: 13 }}>from {iv.inviterName} · you'd be the {iv.yourRole}</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                    <View style={{ flex: 1 }}><Button label="Accept" onPress={() => acceptInvite(iv.token)} /></View>
+                    <View style={{ flex: 1 }}><Button variant="secondary" label="Decline" onPress={() => declineInvite(iv.token)} /></View>
+                  </View>
+                </Card>
+              ))}
+            </>
+          )}
+
+          <SectionLabel style={{ marginTop: 14 }}>Start a deal</SectionLabel>
+          <Card>
+            <TextInput value={item} onChangeText={setItem} placeholder="Item (e.g. iPhone 12, 128GB)" style={inputStyle(theme)} />
+            <TextInput value={amountCents ? formatMoney(amountCents) : ''} onChangeText={(t) => setAmountCents(centsFromInput(t))} placeholder="$0.00" keyboardType="number-pad" style={inputStyle(theme)} />
+            {session ? (
+              <>
+                <TextInput value={cpPhone} onChangeText={(t) => setCpPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" maxLength={12} style={inputStyle(theme)} />
+                <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+                  <RolePick label="I'm buying" active={inviteRole === 'buyer'} onPress={() => setInviteRole('buyer')} />
+                  <View style={{ width: 8 }} />
+                  <RolePick label="I'm selling" active={inviteRole === 'seller'} onPress={() => setInviteRole('seller')} />
+                </View>
+                <Button label={inviteValid() ? `Send invite (${formatMoney(amountCents)})` : 'Send invite'} disabled={!inviteValid()} onPress={inviteSomeone} />
+              </>
+            ) : (
+              <Button label={dealValid() ? `Create deal (${formatMoney(amountCents)})` : 'Create deal'} disabled={!dealValid()} onPress={newDeal} style={{ marginTop: 4 }} />
+            )}
+          </Card>
+
+          <SectionLabel style={{ marginTop: 20 }}>Your deals</SectionLabel>
+          {deals.length === 0 && invites.length === 0 && (
+            <Callout kicker="Get started" title="No deals yet" body="Invite someone above — money is held in escrow and only released when you both confirm the handoff." />
+          )}
+          {deals.length === 0 && invites.length > 0 && <Text style={{ color: theme.colors.textMuted }}>No deals yet.</Text>}
+          {deals.length > 0 && (
+            <Card padded={false} style={{ overflow: 'hidden' }}>
+              {deals.map((d, i) => {
+                const row = (
+                  <View style={{ backgroundColor: theme.colors.surface }}>
+                    <DealHistoryRow
+                      title={d.itemDescription}
+                      amountCents={d.amountCents}
+                      state={d.state}
+                      onPress={() => openDeal(d.id)}
+                      showDivider={i < deals.length - 1}
+                    />
+                  </View>
+                );
+                if (d.state !== 'DRAFT') return <View key={d.id}>{row}</View>;
+                return (
+                  <Swipeable
+                    key={d.id}
+                    renderRightActions={() => (
+                      <Pressable onPress={() => deleteDraft(d.id)} style={{ backgroundColor: theme.colors.danger, justifyContent: 'center', paddingHorizontal: 22 }}>
+                        <Text style={{ color: theme.colors.surface, fontWeight: '700' }}>Delete</Text>
+                      </Pressable>
+                    )}
+                  >
+                    {row}
+                  </Swipeable>
+                );
+              })}
+            </Card>
+          )}
+          {session && <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 10 }}>Tip: swipe a draft deal left to delete it.</Text>}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
