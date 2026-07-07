@@ -76,10 +76,11 @@ describe('worker: runWorkerOnce (driver)', () => {
     const after = await repo.getDeal(dealId);
     expect(after!.deal.state).toBe('EXPIRED_NO_SHOW');
     expect(after!.deal.faultParty).toBe('seller'); // buyer showed, seller didn't
-    // present party (buyer) got refunded on the rail — full escrow + the seller's captured deposit
-    const refunds = (await repo.listTransfers(dealId)).filter((t) => t.direction === 'refund_buyer');
-    expect(refunds.some((t) => t.amountCents === 300_00 + 5_00)).toBe(true);
-    expect(refunds.some((t) => t.amountCents === 5_00)).toBe(true); // the seller's deposit, collected off their card
+    // present party (buyer) got refunded on the rail — full escrow refunded, plus the
+    // seller's captured deposit paid FORWARD to the buyer (a payout, not a refund)
+    const transfers = await repo.listTransfers(dealId);
+    expect(transfers.some((t) => t.direction === 'refund_buyer' && t.amountCents === 300_00 + 5_00)).toBe(true);
+    expect(transfers.some((t) => t.direction === 'payout_buyer' && t.amountCents === 5_00)).toBe(true);
     expect([...rail.holds.values()].some((h) => h.userId === seller.id && h.status === 'captured')).toBe(true);
     void buyer;
   });

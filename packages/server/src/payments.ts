@@ -1,4 +1,4 @@
-import { bankAcct, PLATFORM_PENALTY, type Action, type Deal, type SideEffect } from '@meetme/core';
+import { bankAcct, PLATFORM_PENALTY, type Action, type Deal, type Role, type SideEffect } from '@meetme/core';
 import { handleAction, type ActionRequest, type HandlerResult } from './handler';
 import type { Repo } from './repo';
 import type { ServerCtx } from './ctx';
@@ -6,8 +6,20 @@ import { RISK_DECLINE_THRESHOLD, type PaymentRail, type TransferDirection } from
 
 export type ExecResult = HandlerResult | { ok: false; code: 'risk_declined' | 'funding_not_settled'; reason: string };
 
-const RELEASE = new Set<Action['type']>(['CONFIRM_RECEIVED', 'AUTO_RELEASE']);
-const MONEY_OUT = new Set<Action['type']>(['CONFIRM_RECEIVED', 'AUTO_RELEASE', 'CANCEL', 'EXPIRE_NO_SHOW', 'RESOLVE_DISPUTE']);
+const otherRole = (r: Role): Role => (r === 'buyer' ? 'seller' : 'buyer');
+
+/**
+ * Does this action RELEASE money to the seller (so it must wait for settled funds)?
+ * Covers direct confirm/auto-release AND a dispute that resolves to 'release' — both
+ * admin (`RESOLVE_DISPUTE`) and self-service (`PROPOSE_RESOLUTION`, when the other
+ * side already proposed 'release' so this action completes the agreement).
+ */
+function releasesToSeller(action: Action, deal: Deal): boolean {
+  if (action.type === 'CONFIRM_RECEIVED' || action.type === 'AUTO_RELEASE') return true;
+  if (action.type === 'RESOLVE_DISPUTE') return action.outcome === 'release';
+  if (action.type === 'PROPOSE_RESOLUTION') return action.outcome === 'release' && deal.disputeProposals[otherRole(action.actor)] === 'release';
+  return false;
+}
 
 /**
  * Wraps the M1 handler with rail execution:
@@ -40,7 +52,11 @@ export async function executeAction(repo: Repo, rail: PaymentRail, req: ActionRe
     return res;
   }
 
-  if (RELEASE.has(req.action.type)) {
+  // Settlement gate: never pay the seller before the buyer's funds settle. Keyed on
+  // release SEMANTICS, so it also covers a dispute resolved to 'release' — not just a
+  // fixed action-type list (which is how the gate used to be bypassed).
+  const gateDeal = (await repo.getDeal(req.dealId))?.deal;
+  if (gateDeal && releasesToSeller(req.action, gateDeal)) {
     const funding = await repo.getFundingTransfer(req.dealId);
     if (!funding || funding.status !== 'settled') {
       return { ok: false, code: 'funding_not_settled', reason: "cannot release before the buyer's funds settle" };
@@ -54,22 +70,26 @@ export async function executeAction(repo: Repo, rail: PaymentRail, req: ActionRe
   // then mirror the committed ledger's payouts onto the rail
   await runCommitmentEffects(repo, rail, req.dealId, res.deal, res.effects, ctx);
 
-  if (MONEY_OUT.has(req.action.type)) {
-    const deal = (await repo.getDeal(req.dealId))?.deal ?? res.deal;
-    let n = 0;
-    for (const e of res.ledger) {
-      if (!e.account.startsWith('bank:') || e.amountCents <= 0) continue; // only credits leave the system
-      const userId = e.account.slice('bank:'.length);
-      // credit to the seller = payout; credit to the buyer = refund. Correct across
-      // release, dispute splits, no-show, and cancel (not just RELEASE actions).
-      const direction: TransferDirection = userId === deal.sellerId ? 'payout_seller' : 'refund_buyer';
-      const intent = { dealId: req.dealId, userId, amountCents: e.amountCents, idempotencyKey: `${direction}:${req.dealId}:${n++}` };
-      const tr = direction === 'payout_seller' ? await rail.initiatePayout(intent) : await rail.initiateRefund(intent);
-      await repo.recordTransfer({
-        dealId: req.dealId, provider: rail.name, providerRef: tr.transferId, rail: tr.rail,
-        direction, amountCents: e.amountCents, status: tr.status, riskScore: null, idempotencyKey: intent.idempotencyKey,
-      });
-    }
+  // Disburse whenever the committed ledger CREDITS a bank account — keyed on the
+  // ledger, not an action-type set, so every money-out path (incl. self-service
+  // dispute resolution) always mirrors onto the rail and can never silently drift.
+  const deal = (await repo.getDeal(req.dealId))?.deal ?? res.deal;
+  let n = 0;
+  for (const e of res.ledger) {
+    if (!e.account.startsWith('bank:') || e.amountCents <= 0) continue; // only credits leave the system
+    const userId = e.account.slice('bank:'.length);
+    const toSeller = userId === deal.sellerId;
+    // Compensation to the buyer is money captured from the SELLER (no-show) — a
+    // FORWARD payout, not a refund against the buyer's own charge.
+    const isCompensation = !toSeller && e.memo === 'stood_up_compensation';
+    const direction: TransferDirection = toSeller ? 'payout_seller' : isCompensation ? 'payout_buyer' : 'refund_buyer';
+    const forward = toSeller || isCompensation;
+    const intent = { dealId: req.dealId, userId, amountCents: e.amountCents, idempotencyKey: `${direction}:${req.dealId}:${n++}` };
+    const tr = forward ? await rail.initiatePayout(intent) : await rail.initiateRefund(intent);
+    await repo.recordTransfer({
+      dealId: req.dealId, provider: rail.name, providerRef: tr.transferId, rail: tr.rail,
+      direction, amountCents: e.amountCents, status: tr.status, riskScore: null, idempotencyKey: intent.idempotencyKey,
+    });
   }
   return res;
 }

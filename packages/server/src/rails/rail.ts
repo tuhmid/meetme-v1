@@ -8,7 +8,9 @@
 
 export type RailKind = 'rtp' | 'fednow' | 'ach' | 'card';
 export type TransferStatus = 'pending' | 'processing' | 'settled' | 'returned' | 'failed';
-export type TransferDirection = 'fund_buyer' | 'payout_seller' | 'refund_buyer';
+// payout_buyer = a FORWARD transfer to the buyer (e.g. the seller's captured deposit
+// on a no-show) — distinct from refund_buyer, which reverses the buyer's own charge.
+export type TransferDirection = 'fund_buyer' | 'payout_seller' | 'refund_buyer' | 'payout_buyer';
 
 export interface TransferIntent {
   dealId: string;

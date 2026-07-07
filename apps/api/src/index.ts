@@ -16,11 +16,13 @@ const app = buildServer({
   repo: makeSupabaseRepo(url, key),
   rail: new FakeRail({ fundingRail: 'rtp', instantSettle: true }),
   makeCtx: () => makeServerCtx(),
-  // Real Supabase-JWT verification is wired; the dev bearer shortcut stays on for demos.
+  // Real Supabase-JWT verification is wired; the dev bearer shortcut + /dev routes are
+  // OFF unless ALLOW_DEV=1 (local only). Never enable in a reachable/production env —
+  // they permit `dev:<userId>` impersonation and unauthenticated settle/resolve.
   verifyToken: anon ? makeSupabaseTokenVerifier(url, anon) : undefined,
   push: makeExpoPushSender(),
   mapsKey: process.env.GEOAPIFY_KEY,
-  allowDev: true,
+  allowDev: process.env.ALLOW_DEV === '1',
 });
 
 const port = Number(process.env.PORT ?? 8787);

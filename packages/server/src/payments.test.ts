@@ -90,10 +90,10 @@ describe('M2 seller commitment hold (card on file)', () => {
 
     expect(rail.holds.get(holdId)!.status).toBe('captured');
     expect((await repo.getDeal(dealId))!.deal.sellerHoldId).toBeNull();
-    // the captured $5 goes OUT to the buyer, alongside their full escrow refund
-    const refunds = (await repo.listTransfers(dealId)).filter((t) => t.direction === 'refund_buyer');
-    expect(refunds.some((t) => t.amountCents === 300_00 + 5_00)).toBe(true); // escrow made whole
-    expect(refunds.some((t) => t.amountCents === 5_00)).toBe(true); // + the seller's deposit
+    // the captured $5 goes OUT to the buyer (a forward payout), alongside their full escrow refund
+    const transfers = await repo.listTransfers(dealId);
+    expect(transfers.some((t) => t.direction === 'refund_buyer' && t.amountCents === 300_00 + 5_00)).toBe(true); // escrow made whole
+    expect(transfers.some((t) => t.direction === 'payout_buyer' && t.amountCents === 5_00)).toBe(true); // + the seller's captured deposit
   });
 
   it('collects off the card even when the seller never headed out (no prior hold)', async () => {
@@ -173,6 +173,54 @@ describe('M2 return safety', () => {
     const blocked = await exec(buyer.id, { type: 'CONFIRM_RECEIVED' });
     expect(!blocked.ok && blocked.code).toBe('funding_not_settled');
     expect((await repo.listTransfers(dealId)).some((t) => t.direction === 'payout_seller')).toBe(false); // no loss
+  });
+});
+
+describe('dispute resolution disburses on the rail', () => {
+  async function toDisputed() {
+    const s = await setup();
+    const rail = new FakeRail({ fundingRail: 'rtp', instantSettle: true });
+    const exec = (id: string, a: Action) => executeAction(s.repo, rail, { dealId: s.dealId, action: a, callerUserId: id, channel: 'user' }, s.ctx);
+    ok(await exec(s.seller.id, { type: 'ACCEPT_TERMS' }));
+    ok(await exec(s.buyer.id, { type: 'FUND' }));
+    ok(await exec(s.buyer.id, { type: 'OPEN_DISPUTE', actor: 'buyer' }));
+    return { ...s, rail, exec };
+  }
+
+  it('self-service resolution (both propose split) actually mirrors onto the rail', async () => {
+    const { repo, dealId, buyer, seller, exec } = await toDisputed();
+    ok(await exec(buyer.id, { type: 'PROPOSE_RESOLUTION', actor: 'buyer', outcome: 'split' }));
+    ok(await exec(seller.id, { type: 'PROPOSE_RESOLUTION', actor: 'seller', outcome: 'split' }));
+
+    expect((await repo.getDeal(dealId))!.deal.state).toBe('DISPUTE_RESOLVED');
+    const tr = await repo.listTransfers(dealId);
+    // a split pays both sides back — transfers must exist, not just the ledger (the bug)
+    expect(tr.some((t) => t.direction === 'refund_buyer')).toBe(true);
+    expect(tr.some((t) => t.direction === 'payout_seller')).toBe(true);
+    void buyer; void seller;
+  });
+});
+
+describe('dispute-release respects the settlement gate', () => {
+  it('blocks a resolve-to-release while the buyer ACH is still pending', async () => {
+    const { repo, ctx, buyer, seller, dealId } = await setup();
+    const rail = new FakeRail({ fundingRail: 'ach' }); // pending
+    const exec = (id: string | null, a: Action, channel: 'user' | 'admin' = 'user') =>
+      executeAction(repo, rail, { dealId, action: a, callerUserId: id, channel }, ctx);
+    ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
+    ok(await exec(buyer.id, { type: 'FUND' }));
+    ok(await exec(buyer.id, { type: 'OPEN_DISPUTE', actor: 'buyer' }));
+
+    const blocked = await exec(null, { type: 'RESOLVE_DISPUTE', outcome: 'release' }, 'admin');
+    expect(blocked.ok).toBe(false);
+    expect(!blocked.ok && blocked.code).toBe('funding_not_settled');
+    expect((await repo.getDeal(dealId))!.deal.state).toBe('DISPUTED'); // not resolved
+    expect((await repo.listTransfers(dealId)).some((t) => t.direction === 'payout_seller')).toBe(false);
+
+    await markFundingSettled(repo, dealId);
+    ok(await exec(null, { type: 'RESOLVE_DISPUTE', outcome: 'release' }, 'admin'));
+    expect((await repo.getDeal(dealId))!.deal.state).toBe('DISPUTE_RESOLVED');
+    expect((await repo.listTransfers(dealId)).some((t) => t.direction === 'payout_seller')).toBe(true);
   });
 });
 
