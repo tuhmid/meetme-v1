@@ -31,14 +31,10 @@ export function nextActions(deal: Deal, role: Role): Action[] {
   if (s === 'AGREED' && role === 'buyer') return [{ type: 'FUND' }];
   if (s === 'ARMED') return [{ type: 'HEAD_OUT', actor: role }];
   if (s === 'EN_ROUTE') {
-    const arrived = role === 'buyer' ? deal.buyerArrived : deal.sellerArrived;
-    if (arrived) return [];
-    // The second party still signals their own head-out (for the seller this is
-    // also what places the card hold) — arriving directly stays possible too.
+    // Arrival is auto-detected (geofence) — no manual "I've arrived". The second party
+    // still taps their own head-out (for the seller this also places the card hold).
     const headedOut = role === 'buyer' ? deal.buyerHeadedOut : deal.sellerHeadedOut;
-    return headedOut
-      ? [{ type: 'ARRIVE', party: role }]
-      : [{ type: 'HEAD_OUT', actor: role }, { type: 'ARRIVE', party: role }];
+    return headedOut ? [] : [{ type: 'HEAD_OUT', actor: role }];
   }
   if (s === 'AT_MEETUP' && role === 'buyer' && !deal.codeRevealed) return [{ type: 'REVEAL_CODE' }];
   if (s === 'CONFIRMING' && role === 'buyer') return [{ type: 'CONFIRM_RECEIVED' }];

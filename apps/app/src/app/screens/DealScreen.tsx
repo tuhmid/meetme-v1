@@ -31,8 +31,8 @@ export default function DealScreen() {
     meetupOpen, setMeetupOpen, comingFrom, setComingFrom, customSpot, setCustomSpot, suggestions, meetupMsg,
     myId, myRole, refresh, pullDeal, loadMessages, bearer,
     act, rate, sendMessage, cancelDeal, leaveSafely, openDispute, reportOrBlock, theirName,
-    openProfile, openMeetup, shareLocation, propose, resolveDispute, submitStatement,
-    shareFromAddress, shareFromCurrentLocation, chooseMeetup, useCustomSpot,
+    openProfile, openMeetup, propose, resolveDispute, submitStatement,
+    shareFromAddress, chooseMeetup, useCustomSpot,
   } = useApp();
 
   // initial pull — was gated on `phase === 'deal'`
@@ -203,12 +203,38 @@ export default function DealScreen() {
             {canSetSpot && (
               <Animated.View entering={enterSection(7)} style={{ marginTop: 16 }}>
                 <SectionLabel>Meetup spot</SectionLabel>
-                <MeetupField
-                  selected={deal.meetupName ?? undefined}
-                  custom={!!deal.meetupCustom}
-                  onPressSelected={openMeetup}
-                  onSearch={openMeetup}
-                />
+                {deal.meetupName ? (
+                  <MeetupField selected={deal.meetupName} custom={!!deal.meetupCustom} onPressSelected={openMeetup} onSearch={openMeetup} />
+                ) : suggestions.length > 0 ? (
+                  (() => {
+                    const top = suggestions[0];
+                    const mine = role === 'buyer' ? top.minutesBuyer : top.minutesSeller;
+                    const theirs = role === 'buyer' ? top.minutesSeller : top.minutesBuyer;
+                    return (
+                      <Card>
+                        <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>Suggested — fair for you both</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                          <Ionicons name={top.tier === 'verified' ? 'shield-checkmark' : 'business'} size={18} color={top.tier === 'verified' ? theme.colors.primary : theme.colors.textDim} />
+                          <Text style={{ fontWeight: '700', color: theme.colors.text, marginLeft: 8, flex: 1 }} numberOfLines={1}>{top.name}</Text>
+                        </View>
+                        <Text style={{ color: theme.colors.textDim, fontSize: 13, marginBottom: 12 }}>
+                          {top.tier === 'verified' ? 'Verified safe-exchange spot' : top.category}
+                          {mine != null && theirs != null ? ` · you ${mine}m · them ${theirs}m by car` : ''}
+                        </Text>
+                        <Button label="Confirm this spot" iconName="checkmark-circle" onPress={() => chooseMeetup(top)} />
+                        <Pressable onPress={openMeetup} style={{ marginTop: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                          <Ionicons name="options-outline" size={15} color={theme.colors.primary} />
+                          <Text style={{ color: theme.colors.primary, marginLeft: 6 }}>Change or set a custom spot</Text>
+                        </Pressable>
+                      </Card>
+                    );
+                  })()
+                ) : (
+                  <>
+                    <MeetupField selected={undefined} custom={false} onPressSelected={openMeetup} onSearch={openMeetup} />
+                    {!!meetupMsg && <Text style={{ color: theme.colors.textDim, marginTop: 8, fontSize: 13 }}>{meetupMsg}</Text>}
+                  </>
+                )}
               </Animated.View>
             )}
 
@@ -239,9 +265,18 @@ export default function DealScreen() {
                 )}
                 {deal.state === 'EN_ROUTE' && (
                   <>
-                    <Button variant="secondary" label="Share my live location" iconName="navigate" onPress={shareLocation} />
+                    {(role === 'buyer' ? deal.buyerHeadedOut : deal.sellerHeadedOut) ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 }}>
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.success }} />
+                        <Text style={{ color: theme.colors.textDim, flex: 1 }}>
+                          Sharing your live location — you'll check in automatically at the spot.
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={{ color: theme.colors.textDim }}>Tap "I'm heading out" when you leave — we'll track the rest.</Text>
+                    )}
                     {geo && !geo.coLocated && geo.distanceM != null && (
-                      <Text style={{ color: theme.colors.textDim }}>{geo.distanceM} m apart — keep going.</Text>
+                      <Text style={{ color: theme.colors.textDim }}>{geo.distanceM} m apart — closing in.</Text>
                     )}
                   </>
                 )}
@@ -417,11 +452,10 @@ export default function DealScreen() {
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.colors.overlay }}>
           <View style={{ backgroundColor: theme.colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 30, maxHeight: '88%' }}>
             <ScrollView keyboardShouldPersistTaps="handled">
-              <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 4, color: theme.colors.text }}>Find a fair meeting spot</Text>
-              <Text style={{ color: theme.colors.textDim, marginBottom: 14 }}>Safe public spots roughly halfway — balanced by drive time for both of you. Enter where you're coming from (this is only used to find the midpoint).</Text>
-              <TextInput value={comingFrom} onChangeText={setComingFrom} placeholder="Your starting area or address" style={inputStyle(theme)} />
-              <Button label="Find spots from this address" iconName="search" onPress={shareFromAddress} />
-              <Button variant="secondary" label="Use my current location" iconName="locate" onPress={shareFromCurrentLocation} style={{ marginTop: 8, marginBottom: 8 }} />
+              <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 4, color: theme.colors.text }}>Pick a fair meeting spot</Text>
+              <Text style={{ color: theme.colors.textDim, marginBottom: 14 }}>Safe public spots roughly halfway — balanced by drive time for both of you. We use your location; enter a different starting point below to shift the midpoint.</Text>
+              <TextInput value={comingFrom} onChangeText={setComingFrom} placeholder="Start somewhere else? (optional)" style={inputStyle(theme)} />
+              <Button variant="secondary" label="Search from this address" iconName="search" onPress={shareFromAddress} style={{ marginBottom: 8 }} />
               {!!meetupMsg && <Text style={{ color: theme.colors.textDim, marginBottom: 10 }}>{meetupMsg}</Text>}
               {deal && suggestions.map((s, i) => {
                 const mine = myRole(deal) === 'buyer' ? s.minutesBuyer : s.minutesSeller;

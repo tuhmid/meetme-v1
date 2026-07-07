@@ -51,6 +51,9 @@ function useAppState() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const lastState = useRef<string | null>(null);
+  const coarseLoc = useRef<{ lat: number; lng: number } | null>(null); // primed at onboarding to preload travel times
+  const watchRef = useRef<Location.LocationSubscription | null>(null); // live-location stream while heading out
+  const suggestedFor = useRef<string | null>(null); // dealId we've already auto-loaded meetup suggestions for
 
   // login form — blank by default; the user types their own number (demo seeds live in startDemo)
   const [name, setName] = useState('');
@@ -97,6 +100,35 @@ function useAppState() {
         { text: 'Add card', onPress: () => run(async () => { await api.addPaymentMethod(bearer()); await retry(); }) },
       ]
     );
+  };
+
+  // ---- location: prime at onboarding, require it to head out, stream it while en route ----
+  // Grab a coarse fix once (permission + last-known) so travel-time suggestions are ready
+  // the moment a deal reaches the meetup step — no cold GPS wait mid-deal.
+  const primeLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const pos = (await Location.getLastKnownPositionAsync()) ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }));
+      if (pos) coarseLoc.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    } catch { /* best-effort */ }
+  };
+  // Per-deal hard gate: you can't head out without live location (that's how arrival auto-detects).
+  const ensureLiveLocation = async (): Promise<boolean> => {
+    try {
+      let { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') ({ status } = await Location.requestForegroundPermissionsAsync());
+      return status === 'granted';
+    } catch { return false; }
+  };
+  // Post one live-location ping; if it flipped the deal state (arrived / both here), refresh.
+  const pingLocation = async (lat: number, lng: number) => {
+    if (dealId == null) return;
+    try {
+      const r = await api.sendLocation(bearer(), dealId, lat, lng);
+      setGeo({ distanceM: r.distanceM, coLocated: r.coLocated });
+      if (r.state !== deal?.state) await pullDeal(bearer(), dealId);
+    } catch { /* transient — the next ping retries */ }
   };
 
   const showDeal = (d: Deal, tr?: Transfer[]) => {
@@ -150,6 +182,7 @@ function useAppState() {
       if (name.trim()) { try { await api.updateProfile(sess.accessToken, name.trim()); } catch { /* ignore */ } }
       const token = await registerForPush(); // best-effort; needs a dev build to actually deliver
       if (token) { try { await api.registerPushToken(sess.accessToken, token, Platform.OS); } catch { /* ignore */ } }
+      void primeLocation(); // ask once, up front — meetup times are ready before they're needed
     });
 
   const startDemo = () =>
@@ -159,6 +192,7 @@ function useAppState() {
       setDemo({ buyer: { id: b.userId, name: b.name }, seller: { id: s.userId, name: s.name } });
       setSession(null);
       setViewAs('buyer');
+      void primeLocation();
     });
 
   const logout = () =>
@@ -254,21 +288,46 @@ function useAppState() {
   const propose = (outcome: 'release' | 'refund' | 'split') => act({ type: 'PROPOSE_RESOLUTION', actor: myRole(deal!), outcome });
 
   // ---- meetup spot (fair-by-time safe spot) ----
-  const openMeetup = () => { setSuggestions([]); setMeetupMsg(''); setComingFrom(''); setCustomSpot(''); setMeetupOpen(true); };
+  // Post my "coming from" (a fresh fix, or the coarse one primed at onboarding) so the
+  // server can rank safe spots by BALANCED travel time. Returns false if we have no fix.
+  const postMyLocation = async (): Promise<boolean> => {
+    let lat = coarseLoc.current?.lat;
+    let lng = coarseLoc.current?.lng;
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        lat = pos.coords.latitude; lng = pos.coords.longitude;
+      }
+    } catch { /* fall back to the primed coarse fix */ }
+    if (lat == null || lng == null) return false;
+    await api.sendLocation(bearer(), dealId!, lat, lng);
+    return true;
+  };
   const fetchSuggestions = async () => {
     const r = await api.meetupSuggestions(bearer(), dealId!);
-    if (r.needLocation) { setSuggestions([]); setMeetupMsg("Got it — waiting for the other person to share where they're coming from too."); return; }
-    if (!r.suggestions.length) { setSuggestions([]); setMeetupMsg('No safe spots found near the midpoint. Try a custom spot below.'); return; }
+    if (r.needLocation) { setSuggestions([]); setMeetupMsg("Finding a spot that's fair for you both — waiting on the other person's location."); return; }
+    if (!r.suggestions.length) { setSuggestions([]); setMeetupMsg('No safe spots found near the midpoint — pick a custom spot.'); return; }
     setMeetupMsg(''); setSuggestions(r.suggestions);
   };
-  const shareFromCurrentLocation = () =>
+  // Auto: post my location + load ranked spots — no manual "share location" tap.
+  // Demo drives one device, so we post BOTH parties from here (a couple km apart so the
+  // midpoint is meaningful), falling back to a default origin when there's no GPS fix.
+  const autoSuggest = () =>
     run(async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { setMeetupMsg('Location permission denied.'); return; }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      await api.sendLocation(bearer(), dealId!, pos.coords.latitude, pos.coords.longitude);
+      suggestedFor.current = dealId;
+      if (demo) {
+        const c = coarseLoc.current ?? { lat: 40.7128, lng: -74.006 }; // NYC fallback (simulator / denied)
+        await api.sendLocation(`dev:${demo.buyer.id}`, dealId!, c.lat, c.lng);
+        await api.sendLocation(`dev:${demo.seller.id}`, dealId!, c.lat + 0.02, c.lng + 0.015);
+        await fetchSuggestions();
+        return;
+      }
+      const posted = await postMyLocation();
+      if (!posted) { setMeetupMsg('Turn on location to get fair meetup suggestions.'); return; }
       await fetchSuggestions();
     });
+  const openMeetup = () => { setMeetupMsg(''); setComingFrom(''); setCustomSpot(''); setMeetupOpen(true); void autoSuggest(); };
   const shareFromAddress = () =>
     run(async () => {
       if (!comingFrom.trim()) { setMeetupMsg('Enter where you are coming from.'); return; }
@@ -325,6 +384,12 @@ function useAppState() {
 
   const act = (action: Action) =>
     run(async () => {
+      // Heading out is gated: you need a spot (that's where arrival is detected) and,
+      // in real mode, live location turned on (that's HOW it's detected).
+      if (action.type === 'HEAD_OUT') {
+        if (!deal?.meetupName) { setErr("Pick a meetup spot first — that's where arrival is detected."); return; }
+        if (session && !(await ensureLiveLocation())) { setErr('Turn on location to head out — MeetMe uses it to detect arrival.'); return; }
+      }
       const doAct = async () => {
         const res = await api.act(bearer(), dealId!, action);
         if (res.secret) setCode(res.secret.releaseCode); // minted at REVEAL_CODE, buyer-only
@@ -339,15 +404,42 @@ function useAppState() {
       }
     });
 
-  const shareLocation = () =>
-    run(async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { setErr('Location permission denied'); return; }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const r = await api.sendLocation(bearer(), dealId!, pos.coords.latitude, pos.coords.longitude);
-      setGeo({ distanceM: r.distanceM, coLocated: r.coLocated });
-      await pullDeal(bearer(), dealId!);
-    });
+  // Auto-suggest: once a deal can take a spot and none is set, quietly post my location
+  // and load the ranked safe spots so the top pick is ready to one-tap confirm.
+  useEffect(() => {
+    if (!deal || dealId == null) return;
+    const canSet = ['DRAFT', 'AGREED', 'FUNDED', 'ARMED'].includes(deal.state) && !deal.meetupName;
+    if (canSet && suggestedFor.current !== dealId) void autoSuggest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deal?.state, deal?.meetupName, dealId]);
+
+  // Auto-track: once you've headed out, stream live location until you're at the spot.
+  // Real mode streams GPS; demo (one device) teleports you to the agreed spot so the
+  // geofence still fires. Arrival is never a manual tap.
+  useEffect(() => {
+    const stop = () => { watchRef.current?.remove(); watchRef.current = null; };
+    if (!deal || dealId == null || deal.state !== 'EN_ROUTE') { stop(); return; }
+    const iHeadedOut = myRole(deal) === 'buyer' ? deal.buyerHeadedOut : deal.sellerHeadedOut;
+    if (!iHeadedOut) { stop(); return; }
+
+    if (demo) {
+      if (deal.meetupLat != null && deal.meetupLng != null) void pingLocation(deal.meetupLat, deal.meetupLng);
+      return;
+    }
+    if (watchRef.current) return; // already streaming
+    let cancelled = false;
+    void (async () => {
+      if (!(await ensureLiveLocation())) return;
+      const sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, distanceInterval: 20, timeInterval: 7000 },
+        (pos) => { void pingLocation(pos.coords.latitude, pos.coords.longitude); }
+      );
+      if (cancelled) { sub.remove(); return; }
+      watchRef.current = sub;
+    })();
+    return () => { cancelled = true; stop(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deal?.state, deal?.buyerHeadedOut, deal?.sellerHeadedOut, deal?.meetupLat, deal?.meetupLng, dealId, viewAs, demo]);
 
   // ---- disputes ----
   const openDispute = () =>
@@ -445,8 +537,8 @@ function useAppState() {
     sendCode, verifyCode, startDemo, logout,
     loadHome, pollHome, openDeal, loadMessages, sendMessage, newDeal, inviteSomeone,
     acceptInvite, declineInvite, deleteDraft, cancelDeal, propose,
-    openMeetup, shareFromCurrentLocation, shareFromAddress, chooseMeetup, useCustomSpot,
-    refresh, pullDeal, act, rate, shareLocation,
+    openMeetup, shareFromAddress, chooseMeetup, useCustomSpot,
+    refresh, pullDeal, act, rate,
     openDispute, submitStatement, resolveDispute,
     theirName, openProfile, reportOrBlock, leaveSafely,
   };

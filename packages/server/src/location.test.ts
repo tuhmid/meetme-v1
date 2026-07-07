@@ -58,4 +58,42 @@ describe('M4 geofence — co-location auto-arrival', () => {
     if (r.ok) return;
     expect(r.code).toBe('forbidden');
   });
+
+  it('auto-arrives each party as they reach the AGREED spot (per-party flag → no-show still works)', async () => {
+    const repo = new MemoryRepo();
+    const ctx = makeServerCtx(1_700_000_000_000);
+    const rail = new FakeRail({ fundingRail: 'rtp', instantSettle: true });
+    const b = await signup(repo, { phone: `+1555${Math.random()}`, name: 'Maya', isVoip: false }, ctx);
+    const s = await signup(repo, { phone: `+1666${Math.random()}`, name: 'Sam', isVoip: false }, ctx);
+    if (!b.ok || !s.ok) throw new Error('signup');
+    await repo.setCardOnFile(s.user.id, '4242');
+    const created = await createDealHandler(repo, { creatorUserId: b.user.id, counterpartyUserId: s.user.id, itemDescription: 'x', amountCents: 300_00 }, ctx);
+    if (!created.ok) throw new Error('create');
+    const dealId = created.deal.id;
+    const exec = (id: string, a: Action) => executeAction(repo, rail, { dealId, action: a, callerUserId: id, channel: 'user' }, ctx);
+    await exec(s.user.id, { type: 'ACCEPT_TERMS' });
+    await exec(b.user.id, { type: 'FUND' });
+    const SPOT = { lat: 40.75, lng: -73.99 };
+    await exec(b.user.id, { type: 'SET_MEETUP', name: 'Midtown Precinct', lat: SPOT.lat, lng: SPOT.lng, custom: false });
+    await exec(b.user.id, { type: 'HEAD_OUT', actor: 'buyer' });
+
+    // buyer reaches the spot -> buyerArrived, but still EN_ROUTE (seller isn't here)
+    const r1 = await submitLocation(repo, rail, { dealId, userId: b.user.id, lat: SPOT.lat, lng: SPOT.lng }, ctx);
+    expect(r1.ok && r1.state).toBe('EN_ROUTE');
+    let rec = await repo.getDeal(dealId);
+    expect(rec!.deal.buyerArrived).toBe(true);
+    expect(rec!.deal.sellerArrived).toBe(false); // absent seller stays flagged for the no-show worker
+
+    // seller still far from the spot -> no arrival
+    const r2 = await submitLocation(repo, rail, { dealId, userId: s.user.id, lat: 40.60, lng: -74.20 }, ctx);
+    expect(r2.ok && r2.state).toBe('EN_ROUTE');
+    expect((await repo.getDeal(dealId))!.deal.sellerArrived).toBe(false);
+
+    // seller reaches the spot -> both present -> AT_MEETUP
+    const r3 = await submitLocation(repo, rail, { dealId, userId: s.user.id, lat: SPOT.lat, lng: SPOT.lng }, ctx);
+    expect(r3.ok && r3.coLocated).toBe(true);
+    expect(r3.ok && r3.state).toBe('AT_MEETUP');
+    rec = await repo.getDeal(dealId);
+    expect(rec!.deal.buyerArrived && rec!.deal.sellerArrived).toBe(true);
+  });
 });
