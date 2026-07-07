@@ -5,7 +5,7 @@ import Animated, { FadeIn, FadeInDown, FadeOut, useReducedMotion } from 'react-n
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { ThemeToggle, useTheme } from '../../theme';
+import { useTheme } from '../../theme';
 import { Button, Callout, Card, DealHistoryRow, SectionLabel } from '../../ui';
 import { useApp } from '../AppContext';
 import { RoleBar, RolePick } from '../components';
@@ -19,7 +19,7 @@ export default function HomeScreen() {
   const enterSection = (i: number) =>
     reduceMotion ? FadeIn.duration(duration.base).delay(i * 45) : FadeInDown.duration(duration.base).delay(i * 45);
   const {
-    session, demo, viewAs, setViewAs, logout,
+    session, demo, viewAs, setViewAs,
     banner, setBanner, err,
     deals, invites, loadHome, pollHome, openDeal, deleteDraft,
     acceptInvite, declineInvite,
@@ -51,15 +51,13 @@ export default function HomeScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 6, paddingBottom: 90 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {session ? (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.colors.text, borderRadius: 10, padding: 10, marginBottom: 12 }}>
+            <View style={{ backgroundColor: theme.colors.text, borderRadius: 10, padding: 10, marginBottom: 12 }}>
               <Text style={{ color: theme.colors.surface }}>Signed in as <Text style={{ fontWeight: '800' }}>{session.name}</Text></Text>
-              <Pressable onPress={logout}><Text style={{ color: theme.colors.danger, fontSize: 12 }}>Log out</Text></Pressable>
             </View>
           ) : (
             demo && <RoleBar viewAs={viewAs} users={demo} onToggle={() => setViewAs((r) => (r === 'buyer' ? 'seller' : 'buyer'))} />
           )}
 
-          <View style={{ marginBottom: 12, alignItems: 'flex-start' }}><ThemeToggle /></View>
           {!!banner && (
             <Animated.View
               entering={reduceMotion ? FadeIn.duration(duration.base) : FadeInDown.duration(duration.base)}

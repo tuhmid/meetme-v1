@@ -174,5 +174,26 @@ export const STATE_LABEL: Record<string, string> = {
   REFUNDED: 'Refunded', EXPIRED_NO_SHOW: 'No-show', DISPUTED: 'Disputed', DISPUTE_RESOLVED: 'Resolved',
 };
 
+// Money movements in plain English — the UI should never show raw ledger enums.
+const TRANSFER_LABEL: Record<string, string> = {
+  fund_buyer: 'Funded escrow',
+  payout_seller: 'Released to seller',
+  refund_buyer: 'Refunded',
+  payout_buyer: 'Paid to you',
+  fee_capture: 'MeetMe fee',
+};
+const TRANSFER_STATUS: Record<string, string> = {
+  pending: 'Processing', processing: 'Processing', settled: 'Done',
+  returned: 'Returned', failed: 'Failed', canceled: 'Canceled', cancelled: 'Canceled',
+};
+export function describeTransfer(t: { direction: string; status: string }): { label: string; status: string; done: boolean; failed: boolean } {
+  return {
+    label: TRANSFER_LABEL[t.direction] ?? t.direction,
+    status: TRANSFER_STATUS[t.status] ?? t.status,
+    done: t.status === 'settled',
+    failed: t.status === 'failed' || t.status === 'returned',
+  };
+}
+
 // shared text-input look
 export const inputStyle = (theme: Theme) => ({ backgroundColor: theme.colors.surface, borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: theme.spacing.md, fontSize: theme.type.size.md, marginBottom: theme.spacing.sm } as const);

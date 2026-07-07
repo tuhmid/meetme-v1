@@ -8,6 +8,7 @@
 //    login, polling). Handy for testing without two phones.
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Linking, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { api, type Action, type Deal, type Invite, type MeetupSpot, type Role, type Transfer, type UserProfile } from '../api';
@@ -51,17 +52,24 @@ function useAppState() {
   const [err, setErr] = useState('');
   const lastState = useRef<string | null>(null);
 
-  // login form
+  // login form — blank by default; the user types their own number (demo seeds live in startDemo)
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('555-123-0001');
+  const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-  const [cpPhone, setCpPhone] = useState('555-123-0002'); // counterparty (real mode)
+  const [cpPhone, setCpPhone] = useState(''); // counterparty (real mode)
 
   // new-deal / invite form (nothing hardcoded — these drive the amount + item)
   const [item, setItem] = useState('');
   const [amountCents, setAmountCents] = useState(0);
-  const [inviteRole, setInviteRole] = useState<Role>('buyer'); // the inviter's side
+  const [inviteRole, setInviteRoleRaw] = useState<Role>('buyer'); // the inviter's side
+  // remember the side they invited as last time, across launches
+  useEffect(() => {
+    AsyncStorage.getItem('meetme.inviteRole')
+      .then((v) => { if (v === 'buyer' || v === 'seller') setInviteRoleRaw(v); })
+      .catch(() => {});
+  }, []);
+  const setInviteRole = (r: Role) => { setInviteRoleRaw(r); AsyncStorage.setItem('meetme.inviteRole', r).catch(() => {}); };
   const dealValid = () => !!item.trim() && amountCents > 0;
   const inviteValid = () => dealValid() && phoneValid(cpPhone);
 

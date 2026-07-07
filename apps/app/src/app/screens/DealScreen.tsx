@@ -7,11 +7,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { Role } from '../../api';
 import { supabase } from '../../supabase';
-import { ThemeToggle, useTheme } from '../../theme';
+import { useTheme } from '../../theme';
 import { Badge, Button, Callout, Card, DealCard, MeetupField, PresenceCard, RatingStars, SectionLabel, Stepper, TrustBanner } from '../../ui';
 import { useApp } from '../AppContext';
 import { ProfileModal, RoleBar, RolePick, TrustModal } from '../components';
-import { ESCROW_STATES, formatMoney, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, turnGuidance } from '../dealLogic';
+import { describeTransfer, ESCROW_STATES, formatMoney, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, turnGuidance } from '../dealLogic';
 
 export default function DealScreen() {
   const theme = useTheme();
@@ -23,7 +23,7 @@ export default function DealScreen() {
     reduceMotion ? FadeIn.duration(duration.base).delay(i * 45) : FadeInDown.duration(duration.base).delay(i * 45);
   const crossfade = FadeIn.duration(duration.base);
   const {
-    session, demo, viewAs, setViewAs, logout,
+    session, demo, viewAs, setViewAs,
     banner, setBanner, err, busy,
     dealId, deal, transfers, code, setCode, geo, names, rep, mapUrl,
     messages, msgInput, setMsgInput, statement, setStatement,
@@ -78,16 +78,10 @@ export default function DealScreen() {
       <StatusBar style="dark" />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 6, paddingBottom: 90 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-          {session ? (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.colors.text, borderRadius: 10, padding: 10, marginBottom: 12 }}>
-              <Text style={{ color: theme.colors.surface }}>Signed in as <Text style={{ fontWeight: '800' }}>{session.name}</Text></Text>
-              <Pressable onPress={logout}><Text style={{ color: theme.colors.danger, fontSize: 12 }}>Log out</Text></Pressable>
-            </View>
-          ) : (
-            demo && <RoleBar viewAs={viewAs} users={demo} onToggle={() => setViewAs((r) => (r === 'buyer' ? 'seller' : 'buyer'))} />
+          {!session && demo && (
+            <RoleBar viewAs={viewAs} users={demo} onToggle={() => setViewAs((r) => (r === 'buyer' ? 'seller' : 'buyer'))} />
           )}
 
-          <View style={{ marginBottom: 12, alignItems: 'flex-start' }}><ThemeToggle /></View>
           {!!banner && (
             <Animated.View
               entering={reduceMotion ? FadeIn.duration(duration.base) : FadeInDown.duration(duration.base)}
@@ -384,10 +378,24 @@ export default function DealScreen() {
               </Animated.View>
             )}
 
-            <SectionLabel style={{ marginTop: 22 }}>Money</SectionLabel>
-            {transfers.map((t, i) => (
-              <Text key={i} style={{ color: theme.colors.textMuted, fontSize: 13 }}>{t.direction} · {t.status} · ${(t.amountCents / 100).toFixed(2)}</Text>
-            ))}
+            {transfers.length > 0 && (
+              <>
+                <SectionLabel style={{ marginTop: 22 }}>Money</SectionLabel>
+                {transfers.map((t, i) => {
+                  const d = describeTransfer(t);
+                  const dot = d.failed ? theme.colors.danger : d.done ? theme.colors.success : theme.colors.textMuted;
+                  return (
+                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 5 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: dot, marginRight: 8 }} />
+                        <Text style={{ color: theme.colors.text, fontSize: 14 }}>{d.label}</Text>
+                      </View>
+                      <Text style={{ color: theme.colors.textDim, fontSize: 13 }}>{formatMoney(t.amountCents)} · {d.status}</Text>
+                    </View>
+                  );
+                })}
+              </>
+            )}
             {busy && <ActivityIndicator style={{ marginTop: 12 }} />}
               </>
             );
