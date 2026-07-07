@@ -134,5 +134,9 @@ export interface Repo {
   // safety: block + report
   blockUser(blockerId: string, blockedId: string): Promise<void>;
   isBlocked(a: string, b: string): Promise<boolean>; // either direction
+  /** Users this person has blocked (their direction only), with names for the list UI. */
+  listBlocked(blockerId: string): Promise<{ id: string; name: string }[]>;
+  /** Remove the blocker's own block on a user (one direction). */
+  unblockUser(blockerId: string, blockedId: string): Promise<void>;
   reportUser(r: { reporterId: string; reportedId: string; dealId: string | null; reason: string }): Promise<void>;
 }

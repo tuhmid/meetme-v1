@@ -278,7 +278,7 @@ function useAppState() {
   // fire-and-forget feedback after a successful action — never blocks the flow
   const actionHaptic = (type: Action['type']) => {
     switch (type) {
-      case 'FUND': case 'POST_STAKE': case 'HEAD_OUT': case 'ARRIVE':
+      case 'FUND': case 'HEAD_OUT': case 'ARRIVE':
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         break;
       case 'ENTER_CODE': case 'CONFIRM_RECEIVED':
@@ -295,10 +295,27 @@ function useAppState() {
 
   const act = (action: Action) =>
     run(async () => {
-      const res = await api.act(bearer(), dealId!, action);
-      if (res.secret) setCode(res.secret.releaseCode); // minted at REVEAL_CODE, buyer-only
-      actionHaptic(action.type);
-      await pullDeal(bearer(), dealId!);
+      const doAct = async () => {
+        const res = await api.act(bearer(), dealId!, action);
+        if (res.secret) setCode(res.secret.releaseCode); // minted at REVEAL_CODE, buyer-only
+        actionHaptic(action.type);
+        await pullDeal(bearer(), dealId!);
+      };
+      try {
+        await doAct();
+      } catch (e: any) {
+        if (e?.code !== 'card_required') throw e;
+        // seller needs a card on file to accept — offer to add one and retry once
+        const commitment = formatMoney(deal?.commitmentCents ?? 500);
+        Alert.alert(
+          'Add a card to accept',
+          `You're only ever charged if you don't show up — a ${commitment} hold is placed when you head out, released when the deal completes. (Test mode: a fake Visa is used.)`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Add card', onPress: () => run(async () => { await api.addPaymentMethod(bearer()); await doAct(); }) },
+          ]
+        );
+      }
     });
 
   const shareLocation = () =>

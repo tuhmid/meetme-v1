@@ -301,6 +301,20 @@ export function makeSupabaseRepo(url: string, serviceRoleKey: string): Repo {
       if (error) throw error;
       return (data ?? []).length > 0;
     },
+    async listBlocked(blockerId: string): Promise<{ id: string; name: string }[]> {
+      const { data, error } = await db.from('blocks').select('blocked_id').eq('blocker_id', blockerId);
+      if (error) throw error;
+      const ids = (data ?? []).map((r) => r.blocked_id as string);
+      if (ids.length === 0) return [];
+      const { data: users, error: uErr } = await db.from('users').select('id, name').in('id', ids);
+      if (uErr) throw uErr;
+      const names = new Map((users ?? []).map((u: any) => [u.id as string, u.name as string]));
+      return ids.map((id) => ({ id, name: names.get(id) ?? 'Unknown' }));
+    },
+    async unblockUser(blockerId: string, blockedId: string): Promise<void> {
+      const { error } = await db.from('blocks').delete().eq('blocker_id', blockerId).eq('blocked_id', blockedId);
+      if (error) throw error;
+    },
     async reportUser(r: { reporterId: string; reportedId: string; dealId: string | null; reason: string }): Promise<void> {
       const { error } = await db.from('reports').insert({ reporter_id: r.reporterId, reported_id: r.reportedId, deal_id: r.dealId, reason: r.reason });
       if (error) throw error;

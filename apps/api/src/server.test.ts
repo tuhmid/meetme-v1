@@ -414,4 +414,48 @@ describe('safety — block & report', () => {
     expect(p.shared[0]).toMatchObject({ itemDescription: 'iPhone 12', youWere: 'buyer' });
     expect(p.blocked).toBe(false);
   });
+
+  it('your own profile includes card-on-file fields; someone else viewing you never sees them', async () => {
+    const { post, get } = setup();
+    const maya = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;
+    const sam = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string;
+
+    // no card yet — fields still present on self-view, honestly empty
+    const before = (await get(`/users/${maya}/profile`, maya)).json();
+    expect(before.hasCardOnFile).toBe(false);
+    expect(before.cardLast4).toBeNull();
+
+    await post('/payment-method', {}, maya);
+    const self = (await get(`/users/${maya}/profile`, maya)).json();
+    expect(self.hasCardOnFile).toBe(true);
+    expect(self.cardLast4).toBe('4242');
+
+    // Sam looking at Maya gets the public card only — no payment details
+    const asOther = (await get(`/users/${maya}/profile`, sam)).json();
+    expect(asOther.hasCardOnFile).toBeUndefined();
+    expect(asOther.cardLast4).toBeUndefined();
+  });
+
+  it('blocked list: block shows up in GET /blocks, unblock removes it and the pair can deal again', async () => {
+    const { app, post, get } = setup();
+    const del = (url: string, uid: string): Promise<any> =>
+      app.inject({ method: 'DELETE', url, headers: { authorization: `Bearer dev:${uid}` } }) as Promise<any>;
+    const maya = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;
+    const sam = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string;
+
+    await post(`/users/${sam}/block`, {}, maya);
+    expect((await get('/blocks', maya)).json().blocked).toEqual([{ id: sam, name: 'Sam' }]);
+    expect((await get('/blocks', sam)).json().blocked).toEqual([]); // the block is Maya's, not Sam's
+    expect((await post('/deals', { counterpartyUserId: sam, itemDescription: 'x', amountCents: 100_00 }, maya)).statusCode).toBe(403);
+
+    expect((await del(`/users/${sam}/block`, maya)).statusCode).toBe(200);
+    expect((await get('/blocks', maya)).json().blocked).toEqual([]);
+    expect((await post('/deals', { counterpartyUserId: sam, itemDescription: 'x', amountCents: 100_00 }, maya)).statusCode).toBe(200);
+  });
+
+  it('blocks list & unblock require auth', async () => {
+    const { app } = setup();
+    expect(((await app.inject({ method: 'GET', url: '/blocks' })) as any).statusCode).toBe(401);
+    expect(((await app.inject({ method: 'DELETE', url: '/users/x/block' })) as any).statusCode).toBe(401);
+  });
 });

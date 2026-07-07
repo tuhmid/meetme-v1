@@ -170,6 +170,14 @@ export class MemoryRepo implements Repo {
   async isBlocked(a: string, b: string): Promise<boolean> {
     return this.blocks.some((x) => (x.blockerId === a && x.blockedId === b) || (x.blockerId === b && x.blockedId === a));
   }
+  async listBlocked(blockerId: string): Promise<{ id: string; name: string }[]> {
+    return this.blocks
+      .filter((b) => b.blockerId === blockerId)
+      .map((b) => ({ id: b.blockedId, name: this.users.get(b.blockedId)?.name ?? 'Unknown' }));
+  }
+  async unblockUser(blockerId: string, blockedId: string): Promise<void> {
+    this.blocks = this.blocks.filter((b) => !(b.blockerId === blockerId && b.blockedId === blockedId));
+  }
   async reportUser(r: { reporterId: string; reportedId: string; dealId: string | null; reason: string }): Promise<void> {
     this.reports.push({ ...r });
   }

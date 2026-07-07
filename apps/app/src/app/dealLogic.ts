@@ -24,7 +24,6 @@ export function nextActions(deal: Deal, role: Role): Action[] {
   const s = deal.state;
   if (s === 'DRAFT' && role === 'seller') return [{ type: 'ACCEPT_TERMS' }];
   if (s === 'AGREED' && role === 'buyer') return [{ type: 'FUND' }];
-  if (s === 'FUNDED' && role === 'seller') return [{ type: 'POST_STAKE' }];
   if (s === 'ARMED') return [{ type: 'HEAD_OUT', actor: role }];
   if (s === 'EN_ROUTE') {
     const arrived = role === 'buyer' ? deal.buyerArrived : deal.sellerArrived;
@@ -38,7 +37,6 @@ export function labelFor(a: Action, deal: Deal): string {
   switch (a.type) {
     case 'ACCEPT_TERMS': return 'Accept terms';
     case 'FUND': return `Fund ${formatMoney(deal.amountCents + deal.feeCentsPerSide + deal.commitmentCents)}`;
-    case 'POST_STAKE': return `Post ${formatMoney(deal.commitmentCents)} commitment`;
     case 'HEAD_OUT': return "I'm heading out";
     case 'ARRIVE': return "I've arrived";
     case 'REVEAL_CODE': return 'Reveal release code';
@@ -51,7 +49,6 @@ export function iconFor(a: Action): IconName | undefined {
   switch (a.type) {
     case 'ACCEPT_TERMS': return 'checkmark-circle';
     case 'FUND': return 'lock-closed';
-    case 'POST_STAKE': return 'lock-closed';
     case 'HEAD_OUT': return 'walk';
     case 'ARRIVE': return 'location';
     case 'REVEAL_CODE': return 'key';
@@ -63,8 +60,7 @@ export function iconFor(a: Action): IconName | undefined {
 export function stateBanner(s: string): string {
   const m: Record<string, string> = {
     AGREED: 'Terms accepted — the buyer can fund.',
-    FUNDED: 'Funded — the seller can post their commitment.',
-    ARMED: 'Both staked — head to the meetup.',
+    ARMED: 'Funded — head to the meetup.',
     EN_ROUTE: 'On the way — share your location to meet up.',
     AT_MEETUP: 'You are both here — reveal and enter the code.',
     CONFIRMING: 'Code verified — the buyer confirms receipt.',
@@ -76,20 +72,21 @@ export function stateBanner(s: string): string {
   return m[s] ?? `Now: ${s}`;
 }
 
-export const FUNDED_STATES = ['FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'];
+// states where the buyer's escrow is in (FUND arms the deal directly)
+export const ESCROW_STATES = ['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'];
 
 // deal state → Stepper index (terminal failure states are intentionally absent:
 // the Stepper is hidden for them and the outcome Callout tells the story instead)
 export const STEP_INDEX: Record<string, number> = {
   DRAFT: 0,
   AGREED: 1,
-  FUNDED: 2,
-  ARMED: 3,
-  EN_ROUTE: 3,
-  AT_MEETUP: 3,
-  CONFIRMING: 3,
-  RELEASED: 4,
-  DISPUTE_RESOLVED: 4,
+  FUNDED: 2, // defensive: the state no longer exists server-side
+  ARMED: 2,
+  EN_ROUTE: 2,
+  AT_MEETUP: 2,
+  CONFIRMING: 2,
+  RELEASED: 3,
+  DISPUTE_RESOLVED: 3,
 };
 
 // presence status line for the PresenceCard rows
@@ -99,15 +96,19 @@ export const presenceStatus = (arrived: boolean, headedOut: boolean, distanceM: 
 // Whose move is it, and why it's safe — powers the guidance Callout on the deal screen.
 export function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHint: string | null): { tone: Tone; kicker: string; title: string; body: string } | null {
   const s = deal.state;
-  if (!['DRAFT', 'AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(s)) return null;
+  if (!['DRAFT', 'AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(s)) return null;
   const myTurn = nextActions(deal, role).length > 0 || (s === 'AT_MEETUP' && role === 'seller');
   if (myTurn) {
     let title = 'Your move';
     let body = '';
     if (s === 'DRAFT') { title = 'Review and accept the terms'; body = 'Nothing is charged until the buyer funds the escrow.'; }
     else if (s === 'AGREED') { title = 'Fund the escrow'; body = `${formatMoney(deal.amountCents)} item + ${formatMoney(deal.feeCentsPerSide)} fee + ${formatMoney(deal.commitmentCents)} refundable commitment. MeetMe holds it all — the seller is only paid after you confirm the handoff.`; }
-    else if (s === 'FUNDED') { title = 'Post your commitment'; body = 'A small refundable stake that keeps both sides serious about showing up.'; }
-    else if (s === 'ARMED') { title = "Head out when you're ready"; body = 'Funds are locked in escrow — nothing moves until the handoff.'; }
+    else if (s === 'ARMED') {
+      title = "Head out when you're ready";
+      body = role === 'seller'
+        ? `Funds are locked in escrow. Heading out places a ${formatMoney(deal.commitmentCents)} hold on your card — it's only captured if you don't show.`
+        : 'Funds are locked in escrow — nothing moves until the handoff.';
+    }
     else if (s === 'EN_ROUTE') { title = 'Tap arrive when you get there'; body = 'Share your live location on the way so you can find each other.'; }
     else if (s === 'AT_MEETUP' && role === 'buyer') { title = 'Reveal the release code'; body = 'Check the item first — the code is what releases the money.'; }
     else if (s === 'AT_MEETUP' && role === 'seller') { title = 'Enter the code the buyer shows you'; body = 'The code confirms the buyer is releasing the payment.'; }
@@ -117,7 +118,6 @@ export function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHin
   let body = "Hang tight — you're covered by escrow either way.";
   if (s === 'DRAFT') body = 'They need to accept the terms. Nothing has been charged yet.';
   else if (s === 'AGREED') body = "They're funding the escrow — you'll see it locked here the moment it lands.";
-  else if (s === 'FUNDED') body = `Your money is already locked safely in escrow. ${otherFirst} just needs to post their commitment.`;
   else if (s === 'EN_ROUTE') body = "You've arrived — wait somewhere public until they get there.";
   else if (s === 'AT_MEETUP') body = 'Show them the code below. Nothing moves until you confirm you got the item.';
   else if (s === 'CONFIRMING') body = "Code verified — hand over the item now. If they don't confirm, funds auto-release within 60 minutes; you're protected.";

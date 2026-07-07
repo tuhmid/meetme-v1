@@ -11,7 +11,7 @@ import { ThemeToggle, useTheme } from '../../theme';
 import { Badge, Button, Callout, Card, DealCard, MeetupField, PresenceCard, RatingStars, SectionLabel, Stepper, TrustBanner } from '../../ui';
 import { useApp } from '../AppContext';
 import { ProfileModal, RoleBar, RolePick, TrustModal } from '../components';
-import { formatMoney, FUNDED_STATES, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, turnGuidance } from '../dealLogic';
+import { ESCROW_STATES, formatMoney, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, turnGuidance } from '../dealLogic';
 
 export default function DealScreen() {
   const theme = useTheme();
@@ -111,7 +111,7 @@ export default function DealScreen() {
             const meName = role === 'buyer' ? names.buyer : names.seller;
             const released = deal.state === 'RELEASED' || deal.state === 'DISPUTE_RESOLVED';
             const actions = nextActions(deal, role);
-            const canSetSpot = ['DRAFT', 'AGREED', 'FUNDED', 'ARMED'].includes(deal.state);
+            const canSetSpot = ['DRAFT', 'AGREED', 'ARMED'].includes(deal.state);
             const stepIndex = STEP_INDEX[deal.state];
             const guidance = turnGuidance(deal, role, oFirst, session ? null : `(Demo: tap "View as ${oFirst}" above to act as them.)`);
             const outcome = outcomeFor(deal, role, oFirst);
@@ -119,7 +119,7 @@ export default function DealScreen() {
             const cancelLabel =
               deal.state === 'DRAFT' && role === 'seller' ? 'Decline this deal'
               : deal.state === 'DRAFT' || deal.state === 'AGREED' ? 'Cancel deal'
-              : deal.state === 'FUNDED' || deal.state === 'ARMED' ? 'Cancel deal — full refund'
+              : deal.state === 'ARMED' ? 'Cancel deal — full refund'
               : `Back out — forfeit ${formatMoney(deal.commitmentCents)}`;
             return (
               <>
@@ -148,7 +148,7 @@ export default function DealScreen() {
 
             {stepIndex !== undefined && (
               <Animated.View entering={enterSection(2)} style={{ marginBottom: 14 }}>
-                <Stepper steps={['Agree', 'Fund', 'Commit', 'Meet', 'Done']} current={stepIndex} />
+                <Stepper steps={['Agree', 'Fund', 'Meet', 'Done']} current={stepIndex} />
               </Animated.View>
             )}
 
@@ -157,7 +157,7 @@ export default function DealScreen() {
                 <Pressable onPress={() => setShowTrust(true)}>
                   {/* keyed on state so the held → released swap crossfades */}
                   <Animated.View key={deal.state} entering={crossfade}>
-                    {released || FUNDED_STATES.includes(deal.state) ? (
+                    {released || ESCROW_STATES.includes(deal.state) ? (
                       <TrustBanner amountCents={deal.amountCents} released={released} />
                     ) : (
                       // pre-funding: nothing is held yet — speak in the future tense
@@ -172,9 +172,9 @@ export default function DealScreen() {
               </Animated.View>
             )}
 
-            {(FUNDED_STATES.includes(deal.state) || !!deal.meetupName) && (
+            {(ESCROW_STATES.includes(deal.state) || !!deal.meetupName) && (
               <Animated.View entering={enterSection(4)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                {FUNDED_STATES.includes(deal.state) && (
+                {ESCROW_STATES.includes(deal.state) && (
                   <Animated.View entering={FadeIn.duration(duration.fast)}>
                     <Badge label="Escrow funded" tone="success" iconName="lock-closed" />
                   </Animated.View>
@@ -329,7 +329,7 @@ export default function DealScreen() {
               </Card>
             )}
 
-            {['AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
+            {['AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
               <Animated.View entering={enterSection(9)} style={{ marginTop: 20 }}>
                 <SectionLabel>Chat</SectionLabel>
                 <Card padded={false} style={{ padding: 10 }}>
@@ -355,7 +355,7 @@ export default function DealScreen() {
               </Animated.View>
             )}
 
-            {['DRAFT', 'AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE'].includes(deal.state) && (
+            {['DRAFT', 'AGREED', 'ARMED', 'EN_ROUTE'].includes(deal.state) && (
               <Animated.View entering={enterSection(10)}>
                 <Button variant="dangerGhost" label={cancelLabel} onPress={cancelDeal} style={{ marginTop: 18 }} />
               </Animated.View>
@@ -375,7 +375,7 @@ export default function DealScreen() {
               </Animated.View>
             )}
 
-            {['AGREED', 'FUNDED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
+            {['AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
               <Animated.View entering={enterSection(10)}>
                 <Pressable onPress={reportOrBlock} style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
                   <Ionicons name="flag-outline" size={14} color={theme.colors.textMuted} />

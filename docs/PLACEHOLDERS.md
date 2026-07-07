@@ -129,5 +129,7 @@ whenever we take a shortcut. (Also mirrored in project memory.)
 ## Still stubbed
 - **KYC verify is mocked** — `POST /kyc/verify` just bumps the tier; a real licensed
   KYC partner does ID verification for real. Threshold ($500) is tunable.
+- **No in-app account deletion** — an App Store requirement before public launch.
+  The Account screen's "Delete account" row is a "contact support" placeholder for now.
 
 > Note: US-only phone format (`+1`) for now — international numbers are a later concern.

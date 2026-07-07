@@ -10,7 +10,6 @@ export type Role = 'buyer' | 'seller';
 export type Action =
   | { type: 'ACCEPT_TERMS' }
   | { type: 'FUND' }
-  | { type: 'POST_STAKE' }
   | { type: 'HEAD_OUT'; actor: Role }
   | { type: 'ARRIVE'; party: Role }
   | { type: 'SET_MEETUP'; actor: Role; name: string; lat: number; lng: number; custom: boolean }
@@ -57,6 +56,9 @@ export interface UserProfile {
   memberSince: number | null;
   blocked: boolean;
   shared: { id: string; itemDescription: string; amountCents: number; state: string; youWere: Role }[];
+  // self-only (present when you request your own profile)
+  hasCardOnFile?: boolean;
+  cardLast4?: string | null;
 }
 export interface Invite { token: string; inviterName: string; itemDescription: string; amountCents: number; yourRole: Role }
 export interface MeetupSpot { name: string; lat: number; lng: number; category: string; tier: 'verified' | 'public'; minutesBuyer: number | null; minutesSeller: number | null }
@@ -122,4 +124,7 @@ export const api = {
   getUserProfile: (auth: string, id: string) => req('GET', `/users/${id}/profile`, undefined, auth) as Promise<UserProfile>,
   blockUser: (auth: string, id: string) => req('POST', `/users/${id}/block`, {}, auth) as Promise<{ ok: boolean }>,
   reportUser: (auth: string, id: string, reason: string, dealId?: string) => req('POST', `/users/${id}/report`, { reason, dealId }, auth) as Promise<{ ok: boolean }>,
+  addPaymentMethod: (auth: string) => req('POST', '/payment-method', {}, auth) as Promise<{ ok: boolean; last4: string }>,
+  listBlocked: (auth: string) => req('GET', '/blocks', undefined, auth) as Promise<{ blocked: { id: string; name: string }[] }>,
+  unblock: (auth: string, id: string) => req('DELETE', `/users/${id}/block`, undefined, auth) as Promise<{ ok: boolean }>,
 };

@@ -241,6 +241,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
   // Public reputation card for a counterparty: trust signals + your shared deal
   // history with them. No PII (no phone) — name + reputation are public trust signals.
+  // Your OWN profile additionally includes the private card-on-file fields.
   app.get('/users/:id/profile', async (req, reply) => {
     const uid = await resolveCaller(req);
     if (!uid) return reply.code(401).send({ error: 'auth required' });
@@ -261,6 +262,8 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       memberSince: u.acceptedTermsAt,
       blocked: await deps.repo.isBlocked(uid, id),
       shared,
+      // self-only: never expose another user's payment details
+      ...(id === uid ? { hasCardOnFile: u.hasCardOnFile, cardLast4: u.cardLast4 } : {}),
     };
   });
 
@@ -271,6 +274,21 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const target = (req.params as { id: string }).id;
     if (target === uid) return reply.code(400).send({ error: 'cannot block yourself' });
     await deps.repo.blockUser(uid, target);
+    return { ok: true };
+  });
+
+  // People the caller has blocked — powers the Account screen's blocked list.
+  app.get('/blocks', async (req, reply) => {
+    const uid = await resolveCaller(req);
+    if (!uid) return reply.code(401).send({ error: 'auth required' });
+    return { blocked: await deps.repo.listBlocked(uid) };
+  });
+
+  // Unblock — removes only the caller's own block (the other person's, if any, stands).
+  app.delete('/users/:id/block', async (req, reply) => {
+    const uid = await resolveCaller(req);
+    if (!uid) return reply.code(401).send({ error: 'auth required' });
+    await deps.repo.unblockUser(uid, (req.params as { id: string }).id);
     return { ok: true };
   });
 
