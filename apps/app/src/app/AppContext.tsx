@@ -382,14 +382,8 @@ function useAppState() {
     }
   };
 
-  const act = (action: Action) =>
+  const runAct = (action: Action) =>
     run(async () => {
-      // Heading out is gated: you need a spot (that's where arrival is detected) and,
-      // in real mode, live location turned on (that's HOW it's detected).
-      if (action.type === 'HEAD_OUT') {
-        if (!deal?.meetupName) { setErr("Pick a meetup spot first — that's where arrival is detected."); return; }
-        if (session && !(await ensureLiveLocation())) { setErr('Turn on location to head out — MeetMe uses it to detect arrival.'); return; }
-      }
       const doAct = async () => {
         const res = await api.act(bearer(), dealId!, action);
         if (res.secret) setCode(res.secret.releaseCode); // minted at REVEAL_CODE, buyer-only
@@ -403,6 +397,24 @@ function useAppState() {
         promptAddCard(doAct, deal?.commitmentCents ?? 500);
       }
     });
+
+  // Heading out is the commitment point: gate on a spot + live location, then confirm —
+  // and, like adding a card, spell out the deposit that's on the line if they don't show.
+  const confirmHeadOut = (action: Action) =>
+    run(async () => {
+      if (!deal?.meetupName) { setErr("Pick a meetup spot first — that's where arrival is detected."); return; }
+      if (session && !(await ensureLiveLocation())) { setErr('Turn on location to head out — MeetMe uses it to detect arrival.'); return; }
+      const deposit = formatMoney(deal.commitmentCents);
+      const msg = myRole(deal) === 'seller'
+        ? `Heading out places a ${deposit} hold on your card. You're only charged it if you don't show — it's released the moment the deal completes.`
+        : `Your ${deposit} deposit is in escrow. Once you head out, backing out counts as a no-show and forfeits it.`;
+      Alert.alert('Head to the meetup?', msg, [
+        { text: 'Not yet', style: 'cancel' },
+        { text: "I'm heading out", onPress: () => runAct(action) },
+      ]);
+    });
+
+  const act = (action: Action) => (action.type === 'HEAD_OUT' ? confirmHeadOut(action) : runAct(action));
 
   // Auto-suggest: once a deal can take a spot and none is set, quietly post my location
   // and load the ranked safe spots so the top pick is ready to one-tap confirm.

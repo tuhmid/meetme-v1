@@ -8,6 +8,7 @@ export interface TrustBannerProps {
   released?: boolean;
   title?: string;
   subtitle?: string;
+  tappable?: boolean; // shows a trailing chevron cue when the card opens a details sheet
 }
 
 /**
@@ -15,7 +16,7 @@ export interface TrustBannerProps {
  * a bold title, and a subtitle where the amount is emphasized. Uses only base
  * tokens (successSoft wash + primary/success accents) so it works in both themes.
  */
-export function TrustBanner({ amountCents, released, title, subtitle }: TrustBannerProps) {
+export function TrustBanner({ amountCents, released, title, subtitle, tappable }: TrustBannerProps) {
   const theme = useTheme();
   const { colors, radius, spacing, type } = theme;
 
@@ -75,7 +76,14 @@ export function TrustBanner({ amountCents, released, title, subtitle }: TrustBan
             </>
           )}
         </Text>
+        {tappable && (
+          <Text style={{ color: accent, fontSize: type.size.xs, fontWeight: type.weight.semibold, marginTop: 6 }}>
+            See how you're protected
+          </Text>
+        )}
       </View>
+
+      {tappable && <Ionicons name="chevron-forward" size={18} color={accent} style={{ alignSelf: 'center' }} />}
     </View>
   );
 }

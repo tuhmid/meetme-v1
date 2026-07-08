@@ -167,7 +167,7 @@ export function ProfileModal({ visible, loading, profile, onClose, onReportBlock
  * a shared value drives the sheet's translate and the backdrop's fade, and the
  * Modal only unmounts after the exit finishes.
  */
-function SpringSheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: ReactNode }) {
+export function SpringSheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: ReactNode }) {
   const theme = useTheme();
   const progress = useSharedValue(0);
   const [mounted, setMounted] = useState(visible);

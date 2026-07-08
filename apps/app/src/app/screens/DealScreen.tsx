@@ -1,6 +1,6 @@
 // One deal from draft to done: escrow status, actions, meetup, chat, disputes.
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn, useReducedMotion } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,7 @@ import { useTheme } from '../../theme';
 import { Badge, Button, Callout, Card, DealCard, MeetupField, PresenceCard, RatingStars, SectionLabel, Stepper, TrustBanner } from '../../ui';
 import { QrScanner } from '../../ui/QrScanner'; // imported directly (keeps native expo-camera out of the ui barrel)
 import { useApp } from '../AppContext';
-import { ProfileModal, RoleBar, RolePick, TrustModal } from '../components';
+import { ProfileModal, RoleBar, RolePick, SpringSheet, TrustModal } from '../components';
 import { describeTransfer, ESCROW_STATES, formatMoney, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, turnGuidance } from '../dealLogic';
 
 export default function DealScreen() {
@@ -151,17 +151,18 @@ export default function DealScreen() {
 
             {!hideTrustBanner && (
               <Animated.View entering={enterSection(3)}>
-                <Pressable onPress={() => setShowTrust(true)}>
+                <Pressable onPress={() => setShowTrust(true)} style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}>
                   {/* keyed on state so the held → released swap crossfades */}
                   <Animated.View key={deal.state} entering={crossfade}>
                     {released || ESCROW_STATES.includes(deal.state) ? (
-                      <TrustBanner amountCents={deal.amountCents} released={released} />
+                      <TrustBanner amountCents={deal.amountCents} released={released} tappable />
                     ) : (
                       // pre-funding: nothing is held yet — speak in the future tense
                       <TrustBanner
                         amountCents={deal.amountCents}
                         title="Escrow protection"
                         subtitle={`${formatMoney(deal.amountCents)} will be held by MeetMe until you both confirm the handoff.`}
+                        tappable
                       />
                     )}
                   </Animated.View>
@@ -467,41 +468,37 @@ export default function DealScreen() {
         onReportBlock={() => { setProfileOpen(false); reportOrBlock(); }}
       />
 
-      <Modal visible={meetupOpen} animationType="slide" transparent onRequestClose={() => setMeetupOpen(false)}>
-        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.colors.overlay }}>
-          <View style={{ backgroundColor: theme.colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 30, maxHeight: '88%' }}>
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 4, color: theme.colors.text }}>Pick a fair meeting spot</Text>
-              <Text style={{ color: theme.colors.textDim, marginBottom: 14 }}>Safe public spots roughly halfway — balanced by drive time for both of you. We use your location; enter a different starting point below to shift the midpoint.</Text>
-              <TextInput value={comingFrom} onChangeText={setComingFrom} placeholder="Start somewhere else? (optional)" style={inputStyle(theme)} />
-              <Button variant="secondary" label="Search from this address" iconName="search" onPress={shareFromAddress} style={{ marginBottom: 8 }} />
-              {!!meetupMsg && <Text style={{ color: theme.colors.textDim, marginBottom: 10 }}>{meetupMsg}</Text>}
-              {deal && suggestions.map((s, i) => {
-                const mine = myRole(deal) === 'buyer' ? s.minutesBuyer : s.minutesSeller;
-                const theirs = myRole(deal) === 'buyer' ? s.minutesSeller : s.minutesBuyer;
-                return (
-                  <Pressable key={i} onPress={() => chooseMeetup(s)}>
-                    <Card style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
-                      <Ionicons name={s.tier === 'verified' ? 'shield-checkmark' : 'business'} size={20} color={s.tier === 'verified' ? theme.colors.primary : theme.colors.textDim} />
-                      <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text style={{ fontWeight: '600', color: theme.colors.text }} numberOfLines={1}>{s.name}</Text>
-                        <Text style={{ color: theme.colors.textDim, fontSize: 12 }}>{s.tier === 'verified' ? 'Verified · ' : s.category + ' · '}{mine != null ? `you ${mine}m` : '—'} · {theirs != null ? `them ${theirs}m` : '—'}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-                    </Card>
-                  </Pressable>
-                );
-              })}
-              <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: 14 }} />
-              <Text style={{ fontWeight: '700', marginBottom: 4, color: theme.colors.text }}>Custom spot</Text>
-              <Text style={{ color: theme.colors.textDim, fontSize: 12, marginBottom: 8 }}>Pick your own place — but it won't be a verified safe location.</Text>
-              <TextInput value={customSpot} onChangeText={setCustomSpot} placeholder="Custom address" style={inputStyle(theme)} />
-              <Button variant="secondary" label="Use a custom spot" onPress={useCustomSpot} />
-              <Pressable onPress={() => setMeetupOpen(false)} style={{ marginTop: 12 }}><Text style={{ color: theme.colors.textDim, textAlign: 'center' }}>Close</Text></Pressable>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <SpringSheet visible={meetupOpen} onClose={() => setMeetupOpen(false)}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 22, paddingBottom: 30 }}>
+          <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 4, color: theme.colors.text }}>Pick a fair meeting spot</Text>
+          <Text style={{ color: theme.colors.textDim, marginBottom: 14 }}>Safe public spots roughly halfway — balanced by drive time for both of you. We use your location; enter a different starting point below to shift the midpoint.</Text>
+          <TextInput value={comingFrom} onChangeText={setComingFrom} placeholder="Start somewhere else? (optional)" style={inputStyle(theme)} />
+          <Button variant="secondary" label="Search from this address" iconName="search" onPress={shareFromAddress} style={{ marginBottom: 8 }} />
+          {!!meetupMsg && <Text style={{ color: theme.colors.textDim, marginBottom: 10 }}>{meetupMsg}</Text>}
+          {deal && suggestions.map((s, i) => {
+            const mine = myRole(deal) === 'buyer' ? s.minutesBuyer : s.minutesSeller;
+            const theirs = myRole(deal) === 'buyer' ? s.minutesSeller : s.minutesBuyer;
+            return (
+              <Pressable key={i} onPress={() => chooseMeetup(s)}>
+                <Card style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name={s.tier === 'verified' ? 'shield-checkmark' : 'business'} size={20} color={s.tier === 'verified' ? theme.colors.primary : theme.colors.textDim} />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={{ fontWeight: '600', color: theme.colors.text }} numberOfLines={1}>{s.name}</Text>
+                    <Text style={{ color: theme.colors.textDim, fontSize: 12 }}>{s.tier === 'verified' ? 'Verified · ' : s.category + ' · '}{mine != null ? `you ${mine}m` : '—'} · {theirs != null ? `them ${theirs}m` : '—'}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                </Card>
+              </Pressable>
+            );
+          })}
+          <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: 14 }} />
+          <Text style={{ fontWeight: '700', marginBottom: 4, color: theme.colors.text }}>Custom spot</Text>
+          <Text style={{ color: theme.colors.textDim, fontSize: 12, marginBottom: 8 }}>Pick your own place — but it won't be a verified safe location.</Text>
+          <TextInput value={customSpot} onChangeText={setCustomSpot} placeholder="Custom address" style={inputStyle(theme)} />
+          <Button variant="secondary" label="Use a custom spot" onPress={useCustomSpot} />
+          <Pressable onPress={() => setMeetupOpen(false)} style={{ marginTop: 12 }}><Text style={{ color: theme.colors.textDim, textAlign: 'center' }}>Close</Text></Pressable>
+        </ScrollView>
+      </SpringSheet>
 
       <QrScanner
         visible={scanOpen}
