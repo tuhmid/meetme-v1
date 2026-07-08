@@ -49,6 +49,7 @@ function useAppState() {
   const [suggestions, setSuggestions] = useState<MeetupSpot[]>([]);
   const [meetupMsg, setMeetupMsg] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pendingImageUri, setPendingImageUri] = useState<string | null>(null); // optimistic image while uploading
   const [msgInput, setMsgInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -235,9 +236,14 @@ function useAppState() {
       const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5, base64: true });
       const asset = res.canceled ? null : res.assets?.[0];
       if (!asset?.base64) return;
-      await api.sendMessage(bearer(), dealId!, msgInput.trim(), { base64: asset.base64, contentType: asset.mimeType ?? 'image/jpeg' });
-      setMsgInput('');
-      await loadMessages(bearer(), dealId!);
+      setPendingImageUri(asset.uri); // show it immediately while the upload runs
+      try {
+        await api.sendMessage(bearer(), dealId!, msgInput.trim(), { base64: asset.base64, contentType: asset.mimeType ?? 'image/jpeg' });
+        setMsgInput('');
+        await loadMessages(bearer(), dealId!);
+      } finally {
+        setPendingImageUri(null);
+      }
     });
   const newDeal = () =>
     run(async () => {
@@ -583,7 +589,7 @@ function useAppState() {
     session, demo, viewAs, setViewAs,
     // deal data
     deals, invites, dealId, deal, transfers, code, setCode, banner, setBanner,
-    geo, names, rep, mapUrl, messages, msgInput, setMsgInput,
+    geo, names, rep, mapUrl, messages, msgInput, setMsgInput, pendingImageUri,
     // modals + inputs
     showTrust, setShowTrust, profile, profileOpen, setProfileOpen, profileLoading,
     statement, setStatement, meetupOpen, setMeetupOpen, comingFrom, setComingFrom,

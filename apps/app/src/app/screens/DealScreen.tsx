@@ -23,6 +23,7 @@ export default function DealScreen() {
   const [scanOpen, setScanOpen] = useState(false); // QR scanner modal (seller side)
   const [chatOpen, setChatOpen] = useState(false); // full-screen chat
   const [helpOpen, setHelpOpen] = useState(false); // help & safety sheet
+  const [lastSeenMsgCount, setLastSeenMsgCount] = useState(0); // for the chat-bubble unread badge
   const { duration, spring } = theme.motion;
   // staggered section entrance; plain fade when the user prefers reduced motion
   const enterSection = (i: number) =>
@@ -32,7 +33,7 @@ export default function DealScreen() {
     session, demo, viewAs, setViewAs,
     banner, setBanner, err, busy,
     dealId, deal, transfers, code, setCode, geo, names, rep, mapUrl,
-    messages, msgInput, setMsgInput, statement, setStatement,
+    messages, msgInput, setMsgInput, pendingImageUri, statement, setStatement,
     showTrust, setShowTrust, profile, profileOpen, setProfileOpen, profileLoading,
     meetupOpen, setMeetupOpen, comingFrom, setComingFrom, customSpot, setCustomSpot, suggestions, meetupMsg,
     myId, myRole, refresh, pullDeal, loadMessages, bearer,
@@ -54,6 +55,11 @@ export default function DealScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sellerAtMeetup, code]);
+
+  // Chat-bubble unread badge: while chat is open keep the seen count current; when closed,
+  // any messages beyond it are unread.
+  useEffect(() => { if (chatOpen) setLastSeenMsgCount(messages.length); }, [chatOpen, messages.length]);
+  const unread = Math.max(0, messages.length - lastSeenMsgCount);
 
   // initial pull — was gated on `phase === 'deal'`
   useFocusEffect(
@@ -153,8 +159,32 @@ export default function DealScreen() {
               />
             </Animated.View>
 
-            <Animated.View entering={enterSection(1)}>
-              <Pressable onPress={openProfile} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 14 }} hitSlop={8}>
+            {/* Money-safety reassurance sits with the deal identity — a slim tappable line. */}
+            {!hideTrustBanner && (
+              <Animated.View entering={enterSection(1)}>
+                <Pressable
+                  onPress={() => setShowTrust(true)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row', alignItems: 'center', marginTop: 10,
+                    backgroundColor: theme.colors.successSoft, borderWidth: 1, borderColor: theme.colors.primaryBorder,
+                    borderRadius: theme.radius.lg, paddingVertical: 11, paddingHorizontal: 14, opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Ionicons name={released ? 'checkmark-done-circle' : 'shield-checkmark'} size={19} color={released ? theme.colors.success : theme.colors.primary} />
+                  <Text style={{ flex: 1, marginLeft: 10, color: theme.colors.text, fontWeight: '600', fontSize: 13.5 }} numberOfLines={1}>
+                    {released
+                      ? `${formatMoney(deal.amountCents)} released to the seller`
+                      : ESCROW_STATES.includes(deal.state)
+                        ? `${formatMoney(deal.amountCents)} held safely in escrow`
+                        : `${formatMoney(deal.amountCents)} protected by escrow`}
+                  </Text>
+                  <Text style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>How it works ›</Text>
+                </Pressable>
+              </Animated.View>
+            )}
+
+            <Animated.View entering={enterSection(2)}>
+              <Pressable onPress={openProfile} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 14 }} hitSlop={8}>
                 <Ionicons name="star" size={14} color={theme.colors.star} />
                 <Text style={{ color: theme.colors.textDim, marginLeft: 5, flex: 1 }}>{oName} · trust {oTrust ?? '—'}/100 · {oDeals} deal{oDeals === 1 ? '' : 's'}</Text>
                 <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
@@ -182,30 +212,6 @@ export default function DealScreen() {
                 {actions.map((a, i) => (
                   <Button key={i} label={labelFor(a, deal)} iconName={iconFor(a)} onPress={() => act(a)} />
                 ))}
-              </Animated.View>
-            )}
-
-            {/* Reassurance, kept slim and secondary — one tappable line, not a big card. */}
-            {!hideTrustBanner && (
-              <Animated.View entering={enterSection(5)}>
-                <Pressable
-                  onPress={() => setShowTrust(true)}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row', alignItems: 'center', marginTop: 12,
-                    backgroundColor: theme.colors.successSoft, borderWidth: 1, borderColor: theme.colors.primaryBorder,
-                    borderRadius: theme.radius.lg, paddingVertical: 11, paddingHorizontal: 14, opacity: pressed ? 0.85 : 1,
-                  })}
-                >
-                  <Ionicons name={released ? 'checkmark-done-circle' : 'shield-checkmark'} size={19} color={released ? theme.colors.success : theme.colors.primary} />
-                  <Text style={{ flex: 1, marginLeft: 10, color: theme.colors.text, fontWeight: '600', fontSize: 13.5 }} numberOfLines={1}>
-                    {released
-                      ? `${formatMoney(deal.amountCents)} released to the seller`
-                      : ESCROW_STATES.includes(deal.state)
-                        ? `${formatMoney(deal.amountCents)} held safely in escrow`
-                        : `${formatMoney(deal.amountCents)} protected by escrow`}
-                  </Text>
-                  <Text style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>How it works ›</Text>
-                </Pressable>
               </Animated.View>
             )}
 
@@ -439,22 +445,7 @@ export default function DealScreen() {
               </Card>
             )}
 
-            {['AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
-              <Animated.View entering={enterSection(9)} style={{ marginTop: 20 }}>
-                <Pressable onPress={() => setChatOpen(true)}>
-                  <Card style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={22} color={theme.colors.primary} />
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={{ fontWeight: '700', color: theme.colors.text }}>Chat with {oFirst}</Text>
-                      <Text style={{ color: theme.colors.textDim, fontSize: 13 }} numberOfLines={1}>
-                        {messages.length === 0 ? 'Coordinate your meetup' : (messages[messages.length - 1].body ?? '📷 Photo')}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-                  </Card>
-                </Pressable>
-              </Animated.View>
-            )}
+            {/* Chat now lives in a floating bubble (rendered below the scroll) — always one tap away. */}
 
             {/* Safety-critical: keep "Leave safely" one tap away during a live meetup. */}
             {(['AT_MEETUP', 'CONFIRMING'].includes(deal.state) ||
@@ -497,6 +488,31 @@ export default function DealScreen() {
           })()}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Floating chat bubble — always one tap away (messaging is the whole point). */}
+      {deal && ['AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && !chatOpen && (
+        <Animated.View entering={reduceMotion ? FadeIn.duration(200) : ZoomIn.springify().damping(14).stiffness(180)} style={{ position: 'absolute', right: 18, bottom: 24 }}>
+          <Pressable
+            onPress={() => setChatOpen(true)}
+            style={({ pressed }) => ({
+              width: 58, height: 58, borderRadius: 29, backgroundColor: theme.colors.primary,
+              alignItems: 'center', justifyContent: 'center', transform: [{ scale: pressed ? 0.94 : 1 }],
+              shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6,
+            })}
+          >
+            <Ionicons name="chatbubble-ellipses" size={26} color={theme.colors.onPrimary} />
+            {unread > 0 && (
+              <Animated.View
+                key={unread}
+                entering={reduceMotion ? FadeIn.duration(150) : ZoomIn.springify().damping(11).stiffness(220)}
+                style={{ position: 'absolute', top: -3, right: -3, minWidth: 22, height: 22, borderRadius: 11, backgroundColor: theme.colors.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, borderWidth: 2, borderColor: theme.colors.bg }}
+              >
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>{unread > 9 ? '9+' : unread}</Text>
+              </Animated.View>
+            )}
+          </Pressable>
+        </Animated.View>
+      )}
 
       <TrustModal visible={showTrust} amount={deal?.amountCents ?? 0} onClose={() => setShowTrust(false)} />
 
@@ -559,6 +575,7 @@ export default function DealScreen() {
         setInput={setMsgInput}
         onSend={sendMessage}
         onAttach={attachImage}
+        pendingImageUri={pendingImageUri}
       />
 
       <SpringSheet visible={helpOpen} onClose={() => setHelpOpen(false)}>
