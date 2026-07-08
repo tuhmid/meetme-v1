@@ -295,21 +295,27 @@ max_frequency = "5s"
 # numbers in [auth.sms.test_otp] use their fixed code and NEVER actually call Twilio,
 # so these are harmless placeholders (valid-format, not real credentials). Swap in
 # real Twilio creds via env() only when going hosted.
-# NOTE: superseded by [auth.hook.send_sms] below. A trial Twilio account can't create a
-# Messaging Service (MG...), which this built-in provider requires — so instead we send OTPs
-# ourselves via the send-sms hook (direct Messages API with a plain From number). These stay
-# as harmless valid-format placeholders; the hook intercepts every real send before them.
-[auth.sms.twilio]
+# SMS OTP is delivered by Twilio Verify: Twilio generates, sends, and validates the code
+# (rate-limiting + fraud protection built in), using the "MeetMe" Verify service. Creds come
+# from .env; message_service_sid holds the Verify Service SID (VA...). The +1555 test_otp
+# numbers above still short-circuit for demo logins.
+[auth.sms.twilio_verify]
 enabled = true
+account_sid = "env(TWILIO_ACCOUNT_SID)"
+message_service_sid = "env(TWILIO_VERIFY_SERVICE_SID)"
+auth_token = "env(TWILIO_AUTH_TOKEN)"
+
+# Retained but DISABLED — Verify supersedes both. The built-in Programmable SMS provider needs
+# a Messaging Service (paid), and the custom send-sms hook was the pre-upgrade trial fallback
+# (apps/api still hosts /auth/hooks/send-sms if we ever switch back).
+[auth.sms.twilio]
+enabled = false
 account_sid = "AC00000000000000000000000000000000"
 message_service_sid = "MG00000000000000000000000000000000"
 auth_token = "00000000000000000000000000000000"
 
-# Send-SMS hook: GoTrue POSTs { user:{phone}, sms:{otp} } to our API, which relays the code
-# through Twilio's direct Messages API. host.docker.internal reaches the API on the host Mac.
-# Test-OTP numbers above still short-circuit and never hit this hook.
 [auth.hook.send_sms]
-enabled = true
+enabled = false
 uri = "http://host.docker.internal:8787/auth/hooks/send-sms"
 secrets = "env(SEND_SMS_HOOK_SECRET)"
 

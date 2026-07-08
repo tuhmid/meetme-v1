@@ -7,6 +7,10 @@ import { useApp } from '../AppContext';
 import { formatPhone, inputStyle } from '../dealLogic';
 import { IS_LOCAL_SUPABASE } from '../../supabase';
 
+// Local-only shortcut numbers wired to a fixed OTP in supabase/config.toml [auth.sms.test_otp].
+// Real numbers go through Twilio Verify instead.
+const TEST_NUMBERS = ['555-123-0001', '555-123-0002', '555-123-0003', '555-123-0004'];
+
 export default function LoginScreen() {
   const theme = useTheme();
   const { name, setName, phone, setPhone, otp, setOtp, otpSent, setOtpSent, sendCode, verifyCode, startDemo, busy, err } = useApp();
@@ -28,7 +32,7 @@ export default function LoginScreen() {
         <>
           <TextInput value={otp} onChangeText={setOtp} placeholder="Enter 6-digit code" keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" maxLength={6} style={inputStyle(theme)} />
           <Button label="Verify & continue" onPress={verifyCode} loading={busy} disabled={busy || otp.length < 6} style={{ marginTop: 4 }} />
-          {IS_LOCAL_SUPABASE && <Text style={{ color: theme.colors.textMuted, textAlign: 'center', fontSize: 12, marginTop: 8 }}>Dev: the test code is <Text style={{ fontWeight: '700', color: theme.colors.textDim }}>123456</Text>.</Text>}
+          {IS_LOCAL_SUPABASE && TEST_NUMBERS.includes(phone) && <Text style={{ color: theme.colors.textMuted, textAlign: 'center', fontSize: 12, marginTop: 8 }}>Dev: the test code is <Text style={{ fontWeight: '700', color: theme.colors.textDim }}>123456</Text>.</Text>}
           <Pressable onPress={() => setOtpSent(false)} disabled={busy}><Text style={{ color: theme.colors.primary, textAlign: 'center', marginTop: 12 }}>Use a different number</Text></Pressable>
         </>
       )}
@@ -42,7 +46,7 @@ export default function LoginScreen() {
           <Text style={{ color: theme.colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>Dev · local testing</Text>
           <Text style={{ color: theme.colors.textDim, fontSize: 12, marginBottom: 8 }}>Real-login test numbers — no Twilio. Tap to fill, then the code is 123456.</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {['555-123-0001', '555-123-0002', '555-123-0003', '555-123-0004'].map((n) => (
+            {TEST_NUMBERS.map((n) => (
               <Pressable key={n} onPress={() => setPhone(n)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: theme.colors.surfaceAlt }}>
                 <Text style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>{n}</Text>
               </Pressable>
