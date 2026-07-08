@@ -155,11 +155,12 @@ export function outcomeFor(deal: Deal, role: Role, otherFirst: string): { tone: 
     case 'EXPIRED_NO_SHOW': {
       const iArrived = role === 'buyer' ? deal.buyerArrived : deal.sellerArrived;
       const theyArrived = role === 'buyer' ? deal.sellerArrived : deal.buyerArrived;
+      const comp = formatMoney(deal.commitmentCents - 100); // $4 to the stood-up party
       const body = iArrived && !theyArrived
-        ? `${otherFirst} didn't show. Their ${deposit} deposit was paid to you — not to MeetMe — and anything you'd funded came back in full.`
+        ? `${otherFirst} didn't show. ${comp} of their ${deposit} deposit was paid to you (MeetMe kept a $1 recovery fee), and anything you'd funded came back in full.`
         : !iArrived && theyArrived
-          ? `You didn't make it, so your ${deposit} deposit went to ${otherFirst}. Anything else you'd funded was returned.`
-          : `Nobody made it to the meetup. The ${deposit} deposits were forfeited and the rest was returned.`;
+          ? `You didn't make it, so ${comp} of your ${deposit} deposit went to ${otherFirst} (MeetMe kept a $1 recovery fee). Anything else you'd funded was returned.`
+          : `Neither of you made it — everyone was refunded in full. No penalty, no fee.`;
       return { tone: 'warning', kicker: 'No-show', title: 'Deal expired', body };
     }
   }
@@ -195,3 +196,40 @@ export function describeTransfer(t: { direction: string; status: string }): { la
 
 // shared text-input look
 export const inputStyle = (theme: Theme) => ({ backgroundColor: theme.colors.surface, borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: theme.spacing.md, fontSize: theme.type.size.md, marginBottom: theme.spacing.sm } as const);
+
+// ---- meetup time helpers (null time = ASAP) ----
+const atHour = (base: number, h: number): number => { const x = new Date(base); x.setHours(h, 0, 0, 0); return x.getTime(); };
+
+/** Quick scheduled-time chips beyond ASAP. */
+export function timePresets(now: number = Date.now()): { label: string; time: number }[] {
+  const tomorrow = now + 24 * 3_600_000;
+  const eveningToday = atHour(now, 18);
+  return [
+    { label: 'In 1 hour', time: now + 3_600_000 },
+    { label: 'This evening', time: eveningToday > now ? eveningToday : atHour(tomorrow, 18) },
+    { label: 'Tomorrow AM', time: atHour(tomorrow, 9) },
+  ];
+}
+
+/** "ASAP" | "Today 3:00 PM" | "Tomorrow 9:00 AM" | "Jul 9, 3:00 PM". */
+export function formatMeetupTime(t: number | null): string {
+  if (t == null) return 'ASAP';
+  const d = new Date(t);
+  const now = new Date();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return `Today ${time}`;
+  if (d.toDateString() === new Date(now.getTime() + 24 * 3_600_000).toDateString()) return `Tomorrow ${time}`;
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
+}
+
+/** "in 2h 15m" | "in 8m" | "now" | "12m ago". */
+export function countdownTo(t: number, now: number = Date.now()): string {
+  const diff = t - now;
+  const abs = Math.abs(diff);
+  const h = Math.floor(abs / 3_600_000);
+  const m = Math.round((abs % 3_600_000) / 60_000);
+  const span = h > 0 ? `${h}h ${m}m` : `${m}m`;
+  if (diff < -60_000) return `${span} ago`;
+  if (diff < 60_000) return 'now';
+  return `in ${span}`;
+}

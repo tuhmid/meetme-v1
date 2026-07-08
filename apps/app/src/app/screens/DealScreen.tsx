@@ -13,7 +13,7 @@ import { Badge, Button, Callout, Card, DealCard, MeetupField, PresenceCard, Rati
 import { QrScanner } from '../../ui/QrScanner'; // imported directly (keeps native expo-camera out of the ui barrel)
 import { useApp } from '../AppContext';
 import { ProfileModal, RoleBar, RolePick, SpringSheet, TrustModal } from '../components';
-import { describeTransfer, ESCROW_STATES, formatMoney, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, turnGuidance } from '../dealLogic';
+import { countdownTo, describeTransfer, ESCROW_STATES, formatMeetupTime, formatMoney, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, timePresets, turnGuidance } from '../dealLogic';
 
 export default function DealScreen() {
   const theme = useTheme();
@@ -35,7 +35,7 @@ export default function DealScreen() {
     myId, myRole, refresh, pullDeal, loadMessages, bearer,
     act, rate, sendMessage, cancelDeal, leaveSafely, openDispute, reportOrBlock, theirName,
     openProfile, openMeetup, propose, resolveDispute, submitStatement,
-    shareFromAddress, chooseMeetup, useCustomSpot,
+    shareFromAddress, chooseMeetup, useCustomSpot, confirmMeetup, reschedule, proposeTime, setProposeTime,
   } = useApp();
 
   // Seller's release code auto-submits — typed, scanned, OR pre-filled (demo shares the
@@ -141,7 +141,13 @@ export default function DealScreen() {
                 item={deal.itemDescription}
                 amountCents={deal.amountCents}
                 tag={deal.state === 'RELEASED' ? 'RELEASED' : 'ESCROW'}
-                metaLine={deal.meetupName ?? 'No meetup spot yet'}
+                metaLine={
+                  deal.meetupConfirmed && deal.meetupName
+                    ? `${deal.meetupName} · ${formatMeetupTime(deal.meetupTime)}`
+                    : deal.meetupName
+                      ? `${deal.meetupName} · proposed`
+                      : 'Meetup not arranged yet'
+                }
                 people={{ a: meName, b: oName, label: `You & ${oFirst}`, aColor: theme.colors[role], bColor: theme.colors[other] }}
                 // no star rating here: trustScore isn't a star average — the honest
                 // "trust N/100 · N deals" line below covers reputation until we
@@ -218,12 +224,40 @@ export default function DealScreen() {
               </Animated.View>
             )}
 
-            {canSetSpot && (
+            {/* Arrange the meetup: propose spot + time; the OTHER side confirms. */}
+            {canSetSpot && !deal.meetupConfirmed && (
               <Animated.View entering={enterSection(7)} style={{ marginTop: 16 }}>
-                <SectionLabel>Meetup spot</SectionLabel>
-                {deal.meetupName ? (
-                  <MeetupField selected={deal.meetupName} custom={!!deal.meetupCustom} onPressSelected={openMeetup} onSearch={openMeetup} />
+                <SectionLabel>Arrange the meetup</SectionLabel>
+                {deal.meetupName && deal.meetupProposedBy && deal.meetupProposedBy !== role ? (
+                  // they proposed — confirm or suggest a change
+                  <Card>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>{oFirst} proposes</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                      <Ionicons name={deal.meetupCustom ? 'alert-circle' : 'shield-checkmark'} size={18} color={deal.meetupCustom ? theme.colors.warning : theme.colors.primary} />
+                      <Text style={{ fontWeight: '700', color: theme.colors.text, marginLeft: 8, flex: 1 }} numberOfLines={1}>{deal.meetupName}</Text>
+                    </View>
+                    <Text style={{ color: theme.colors.textDim, fontSize: 13, marginBottom: 12 }}>{formatMeetupTime(deal.meetupTime)}{deal.meetupCustom ? ' · custom spot' : ''}</Text>
+                    <Button label="Confirm meetup" iconName="checkmark-circle" onPress={confirmMeetup} />
+                    <Pressable onPress={reschedule} style={{ marginTop: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                      <Ionicons name="options-outline" size={15} color={theme.colors.primary} />
+                      <Text style={{ color: theme.colors.primary, marginLeft: 6 }}>Suggest a different spot or time</Text>
+                    </Pressable>
+                  </Card>
+                ) : deal.meetupName && deal.meetupProposedBy === role ? (
+                  // I proposed — waiting on them
+                  <Card>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                      <Ionicons name="time-outline" size={18} color={theme.colors.textDim} />
+                      <Text style={{ fontWeight: '700', color: theme.colors.text, marginLeft: 8, flex: 1 }} numberOfLines={1}>{deal.meetupName}</Text>
+                    </View>
+                    <Text style={{ color: theme.colors.textDim, fontSize: 13, marginBottom: 12 }}>{formatMeetupTime(deal.meetupTime)} · waiting for {oFirst} to confirm</Text>
+                    <Pressable onPress={reschedule} style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                      <Ionicons name="options-outline" size={15} color={theme.colors.primary} />
+                      <Text style={{ color: theme.colors.primary, marginLeft: 6 }}>Change the spot or time</Text>
+                    </Pressable>
+                  </Card>
                 ) : suggestions.length > 0 ? (
+                  // nothing proposed yet — propose the top spot + a time
                   (() => {
                     const top = suggestions[0];
                     const mine = role === 'buyer' ? top.minutesBuyer : top.minutesSeller;
@@ -239,7 +273,18 @@ export default function DealScreen() {
                           {top.tier === 'verified' ? 'Verified safe-exchange spot' : top.category}
                           {mine != null && theirs != null ? ` · you ${mine}m · them ${theirs}m by car` : ''}
                         </Text>
-                        <Button label="Confirm this spot" iconName="checkmark-circle" onPress={() => chooseMeetup(top)} />
+                        <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>When?</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                          {[{ label: 'ASAP', time: null as number | null }, ...timePresets()].map((p) => {
+                            const active = proposeTime === p.time;
+                            return (
+                              <Pressable key={p.label} onPress={() => setProposeTime(p.time)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: active ? theme.colors.primary : theme.colors.border, backgroundColor: active ? theme.colors.primarySoft : theme.colors.surface }}>
+                                <Text style={{ color: active ? theme.colors.primary : theme.colors.textDim, fontWeight: '600', fontSize: 13 }}>{p.label}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                        <Button label={`Propose to ${oFirst}`} iconName="paper-plane" onPress={() => chooseMeetup(top)} />
                         <Pressable onPress={openMeetup} style={{ marginTop: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
                           <Ionicons name="options-outline" size={15} color={theme.colors.primary} />
                           <Text style={{ color: theme.colors.primary, marginLeft: 6 }}>Change or set a custom spot</Text>
@@ -253,6 +298,30 @@ export default function DealScreen() {
                     {!!meetupMsg && <Text style={{ color: theme.colors.textDim, marginTop: 8, fontSize: 13 }}>{meetupMsg}</Text>}
                   </>
                 )}
+              </Animated.View>
+            )}
+
+            {/* Confirmed meetup + countdown (persists into EN_ROUTE) */}
+            {deal.meetupConfirmed && ['ARMED', 'EN_ROUTE', 'AT_MEETUP'].includes(deal.state) && (
+              <Animated.View entering={enterSection(7)} style={{ marginTop: 16 }}>
+                <SectionLabel>Meetup</SectionLabel>
+                <Card>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name={deal.meetupCustom ? 'alert-circle' : 'shield-checkmark'} size={18} color={deal.meetupCustom ? theme.colors.warning : theme.colors.primary} />
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <Text style={{ fontWeight: '700', color: theme.colors.text }} numberOfLines={1}>{deal.meetupName}</Text>
+                      <Text style={{ color: theme.colors.textDim, fontSize: 13 }}>
+                        {formatMeetupTime(deal.meetupTime)}{deal.meetupTime != null ? ` · ${countdownTo(deal.meetupTime)}` : " · head out when you're both ready"}
+                      </Text>
+                    </View>
+                  </View>
+                  {deal.state === 'ARMED' && (
+                    <Pressable onPress={reschedule} style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                      <Ionicons name="calendar-outline" size={15} color={theme.colors.primary} />
+                      <Text style={{ color: theme.colors.primary, marginLeft: 6 }}>Reschedule</Text>
+                    </Pressable>
+                  )}
+                </Card>
               </Animated.View>
             )}
 
@@ -482,8 +551,20 @@ export default function DealScreen() {
 
       <SpringSheet visible={meetupOpen} onClose={() => setMeetupOpen(false)}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 22, paddingBottom: 30 }}>
-          <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 4, color: theme.colors.text }}>Pick a fair meeting spot</Text>
-          <Text style={{ color: theme.colors.textDim, marginBottom: 14 }}>Safe public spots roughly halfway — balanced by drive time for both of you. We use your location; enter a different starting point below to shift the midpoint.</Text>
+          <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 4, color: theme.colors.text }}>Arrange the meetup</Text>
+          <Text style={{ color: theme.colors.textDim, marginBottom: 14 }}>Safe public spots roughly halfway — balanced by drive time for both of you. Pick a time, then tap a spot to propose it.</Text>
+          <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>When?</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+            {[{ label: 'ASAP', time: null as number | null }, ...timePresets()].map((p) => {
+              const active = proposeTime === p.time;
+              return (
+                <Pressable key={p.label} onPress={() => setProposeTime(p.time)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: active ? theme.colors.primary : theme.colors.border, backgroundColor: active ? theme.colors.primarySoft : theme.colors.surface }}>
+                  <Text style={{ color: active ? theme.colors.primary : theme.colors.textDim, fontWeight: '600', fontSize: 13 }}>{p.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={{ color: theme.colors.textDim, fontSize: 12, marginBottom: 12 }}>Tapping a spot proposes it for <Text style={{ fontWeight: '700', color: theme.colors.text }}>{formatMeetupTime(proposeTime)}</Text> — {theirName()} confirms.</Text>
           <TextInput value={comingFrom} onChangeText={setComingFrom} placeholder="Start somewhere else? (optional)" style={inputStyle(theme)} />
           <Button variant="secondary" label="Search from this address" iconName="search" onPress={shareFromAddress} style={{ marginBottom: 8 }} />
           {!!meetupMsg && <Text style={{ color: theme.colors.textDim, marginBottom: 10 }}>{meetupMsg}</Text>}

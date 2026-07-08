@@ -44,6 +44,7 @@ function useAppState() {
   const [meetupOpen, setMeetupOpen] = useState(false);
   const [comingFrom, setComingFrom] = useState('');
   const [customSpot, setCustomSpot] = useState('');
+  const [proposeTime, setProposeTime] = useState<number | null>(null); // selected meetup time; null = ASAP
   const [suggestions, setSuggestions] = useState<MeetupSpot[]>([]);
   const [meetupMsg, setMeetupMsg] = useState('');
   const [messages, setMessages] = useState<{ senderId: string; body: string; createdAt: number }[]>([]);
@@ -335,24 +336,31 @@ function useAppState() {
       await api.sendLocation(bearer(), dealId!, g.lat, g.lng);
       await fetchSuggestions();
     });
-  const chooseMeetup = (s: MeetupSpot) =>
+  // Propose a meetup (spot + the selected time; null = ASAP). The OTHER side confirms.
+  const proposeMeetup = (spot: { name: string; lat: number; lng: number; custom: boolean }) =>
     run(async () => {
-      await api.act(bearer(), dealId!, { type: 'SET_MEETUP', actor: myRole(deal!), name: s.name, lat: s.lat, lng: s.lng, custom: false });
+      await api.act(bearer(), dealId!, { type: 'PROPOSE_MEETUP', actor: myRole(deal!), name: spot.name, lat: spot.lat, lng: spot.lng, custom: spot.custom, time: proposeTime });
       setMeetupOpen(false);
       await pullDeal(bearer(), dealId!);
     });
+  const chooseMeetup = (s: MeetupSpot) => proposeMeetup({ name: s.name, lat: s.lat, lng: s.lng, custom: false });
   const useCustomSpot = () =>
     run(async () => {
       if (!customSpot.trim()) { setMeetupMsg('Enter a custom address.'); return; }
       const g = await api.geocode(bearer(), customSpot.trim());
       Alert.alert('Use a custom spot?', `"${g.name}" isn't a verified safe location. Public, camera-covered spots — police stations, transit hubs — are safest.`, [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Use it anyway', style: 'destructive', onPress: () => run(async () => {
-          await api.act(bearer(), dealId!, { type: 'SET_MEETUP', actor: myRole(deal!), name: g.name, lat: g.lat, lng: g.lng, custom: true });
-          setMeetupOpen(false); await pullDeal(bearer(), dealId!);
-        }) },
+        { text: 'Use it anyway', style: 'destructive', onPress: () => proposeMeetup({ name: g.name, lat: g.lat, lng: g.lng, custom: true }) },
       ]);
     });
+  // The other party accepts the proposed spot + time (locks it in).
+  const confirmMeetup = () =>
+    run(async () => {
+      await api.act(bearer(), dealId!, { type: 'CONFIRM_MEETUP', actor: myRole(deal!) });
+      await pullDeal(bearer(), dealId!);
+    });
+  // Reschedule / change the spot: re-open the arrange sheet to propose again.
+  const reschedule = () => { setProposeTime(deal?.meetupTime ?? null); openMeetup(); };
 
   const refresh = () => run(() => pullDeal(bearer(), dealId!));
 
@@ -402,7 +410,7 @@ function useAppState() {
   // and, like adding a card, spell out the deposit that's on the line if they don't show.
   const confirmHeadOut = (action: Action) =>
     run(async () => {
-      if (!deal?.meetupName) { setErr("Pick a meetup spot first — that's where arrival is detected."); return; }
+      if (!deal?.meetupConfirmed) { setErr('Agree on a meetup spot + time first — that both-confirmed plan is what the clock runs on.'); return; }
       if (session && !(await ensureLiveLocation())) { setErr('Turn on location to head out — MeetMe uses it to detect arrival.'); return; }
       const deposit = formatMoney(deal.commitmentCents);
       const msg = myRole(deal) === 'seller'
@@ -420,10 +428,10 @@ function useAppState() {
   // and load the ranked safe spots so the top pick is ready to one-tap confirm.
   useEffect(() => {
     if (!deal || dealId == null) return;
-    const canSet = ['DRAFT', 'AGREED', 'FUNDED', 'ARMED'].includes(deal.state) && !deal.meetupName;
+    const canSet = ['DRAFT', 'AGREED', 'FUNDED', 'ARMED'].includes(deal.state) && !deal.meetupConfirmed;
     if (canSet && suggestedFor.current !== dealId) void autoSuggest();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deal?.state, deal?.meetupName, dealId]);
+  }, [deal?.state, deal?.meetupConfirmed, dealId]);
 
   // Auto-track: once you've headed out, stream live location until you're at the spot.
   // Real mode streams GPS; demo (one device) teleports you to the agreed spot so the
@@ -554,7 +562,7 @@ function useAppState() {
     // modals + inputs
     showTrust, setShowTrust, profile, profileOpen, setProfileOpen, profileLoading,
     statement, setStatement, meetupOpen, setMeetupOpen, comingFrom, setComingFrom,
-    customSpot, setCustomSpot, suggestions, meetupMsg,
+    customSpot, setCustomSpot, suggestions, meetupMsg, proposeTime, setProposeTime,
     // status
     busy, err,
     // login form
@@ -567,7 +575,7 @@ function useAppState() {
     sendCode, verifyCode, startDemo, logout,
     loadHome, pollHome, openDeal, loadMessages, sendMessage, newDeal, inviteSomeone,
     acceptInvite, declineInvite, deleteDraft, cancelDeal, propose,
-    openMeetup, shareFromAddress, chooseMeetup, useCustomSpot,
+    openMeetup, shareFromAddress, chooseMeetup, useCustomSpot, proposeMeetup, confirmMeetup, reschedule,
     refresh, pullDeal, act, rate,
     openDispute, submitStatement, resolveDispute,
     theirName, openProfile, reportOrBlock, leaveSafely,

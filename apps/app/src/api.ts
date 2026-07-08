@@ -13,6 +13,8 @@ export type Action =
   | { type: 'HEAD_OUT'; actor: Role }
   | { type: 'ARRIVE'; party: Role }
   | { type: 'SET_MEETUP'; actor: Role; name: string; lat: number; lng: number; custom: boolean }
+  | { type: 'PROPOSE_MEETUP'; actor: Role; name: string; lat: number; lng: number; custom: boolean; time: number | null }
+  | { type: 'CONFIRM_MEETUP'; actor: Role }
   | { type: 'REVEAL_CODE' }
   | { type: 'ENTER_CODE'; code: string }
   | { type: 'CONFIRM_RECEIVED' }
@@ -40,6 +42,9 @@ export interface Deal {
   meetupLat: number | null;
   meetupLng: number | null;
   meetupCustom: boolean;
+  meetupTime: number | null; // epoch ms; null = ASAP
+  meetupProposedBy: Role | null;
+  meetupConfirmed: boolean;
   resolutionNote: string | null;
   disputePositions: { actor: Role; text: string; at: number }[];
   disputeProposals: { buyer?: 'release' | 'refund' | 'split'; seller?: 'release' | 'refund' | 'split' };
