@@ -9,7 +9,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { Role } from '../../api';
 import { supabase } from '../../supabase';
 import { useTheme } from '../../theme';
-import { Badge, Button, Callout, Card, DealCard, MeetupField, PresenceCard, RatingStars, SectionLabel, Stepper, TrustBanner } from '../../ui';
+import { Accordion, Badge, Button, Callout, Card, DealCard, MeetupField, PresenceCard, RatingStars, SectionLabel, Stepper, TrustBanner } from '../../ui';
 import { QrScanner } from '../../ui/QrScanner'; // imported directly (keeps native expo-camera out of the ui barrel)
 import { ChatModal } from '../ChatModal';
 import { useApp } from '../AppContext';
@@ -22,6 +22,7 @@ export default function DealScreen() {
   const reduceMotion = useReducedMotion();
   const [scanOpen, setScanOpen] = useState(false); // QR scanner modal (seller side)
   const [chatOpen, setChatOpen] = useState(false); // full-screen chat
+  const [helpOpen, setHelpOpen] = useState(false); // help & safety sheet
   const { duration, spring } = theme.motion;
   // staggered section entrance; plain fade when the user prefers reduced motion
   const enterSection = (i: number) =>
@@ -129,11 +130,6 @@ export default function DealScreen() {
             const guidance = turnGuidance(deal, role, oFirst, session ? null : `(Demo: tap "View as ${oFirst}" above to act as them.)`);
             const outcome = outcomeFor(deal, role, oFirst);
             const hideTrustBanner = ['REFUNDED', 'CANCELLED', 'EXPIRED_NO_SHOW'].includes(deal.state);
-            const cancelLabel =
-              deal.state === 'DRAFT' && role === 'seller' ? 'Decline this deal'
-              : deal.state === 'DRAFT' || deal.state === 'AGREED' ? 'Cancel deal'
-              : deal.state === 'ARMED' ? 'Cancel deal — full refund'
-              : `Back out — forfeit your ${formatMoney(deal.commitmentCents)} deposit`;
             return (
               <>
             <Pressable onPress={() => navigation.goBack()}><Text style={{ color: theme.colors.primary, marginBottom: 10 }}>← My deals</Text></Pressable>
@@ -473,54 +469,40 @@ export default function DealScreen() {
               </Animated.View>
             )}
 
-            {['DRAFT', 'AGREED', 'ARMED', 'EN_ROUTE'].includes(deal.state) && (
-              <Animated.View entering={enterSection(10)}>
-                <Button variant="dangerGhost" label={cancelLabel} onPress={cancelDeal} style={{ marginTop: 18 }} />
-              </Animated.View>
-            )}
-
-            {/* only once you're actually en route to / at the meetup — not while still ARMED */}
+            {/* Safety-critical: keep "Leave safely" one tap away during a live meetup. */}
             {(['AT_MEETUP', 'CONFIRMING'].includes(deal.state) ||
               (deal.state === 'EN_ROUTE' && (role === 'buyer' ? deal.buyerHeadedOut : deal.sellerHeadedOut))) && (
               <Animated.View entering={enterSection(10)}>
-                <Button variant="dangerGhost" iconName="shield" label="Feel unsafe? Leave safely" onPress={leaveSafely} style={{ marginTop: 10 }} />
+                <Button variant="dangerGhost" iconName="shield" label="Feel unsafe? Leave safely" onPress={leaveSafely} style={{ marginTop: 18 }} />
               </Animated.View>
             )}
 
-            {['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(deal.state) && (
-              <Animated.View entering={enterSection(10)}>
-                <Pressable onPress={openDispute} style={{ marginTop: 14 }}>
-                  <Text style={{ color: theme.colors.danger, textAlign: 'center' }}>Something wrong? Report a problem</Text>
-                </Pressable>
-              </Animated.View>
-            )}
-
-            {['AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
-              <Animated.View entering={enterSection(10)}>
-                <Pressable onPress={reportOrBlock} style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-                  <Ionicons name="flag-outline" size={14} color={theme.colors.textMuted} />
-                  <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginLeft: 5 }}>Report or block {theirName()}</Text>
-                </Pressable>
-              </Animated.View>
+            {/* Everything else (cancel / report a problem / block) collapses into one calm entry. */}
+            {['DRAFT', 'AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
+              <Pressable onPress={() => setHelpOpen(true)} style={{ marginTop: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 6 }}>
+                <Ionicons name="ellipsis-horizontal-circle-outline" size={16} color={theme.colors.textMuted} />
+                <Text style={{ color: theme.colors.textMuted, marginLeft: 6 }}>Help &amp; safety</Text>
+              </Pressable>
             )}
 
             {transfers.length > 0 && (
-              <>
-                <SectionLabel style={{ marginTop: 22 }}>Money</SectionLabel>
-                {transfers.map((t, i) => {
-                  const d = describeTransfer(t);
-                  const dot = d.failed ? theme.colors.danger : d.done ? theme.colors.success : theme.colors.textMuted;
-                  return (
-                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 5 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: dot, marginRight: 8 }} />
-                        <Text style={{ color: theme.colors.text, fontSize: 14 }}>{d.label}</Text>
+              <View style={{ marginTop: 18 }}>
+                <Accordion title="Payment activity">
+                  {transfers.map((t, i) => {
+                    const d = describeTransfer(t);
+                    const dot = d.failed ? theme.colors.danger : d.done ? theme.colors.success : theme.colors.textMuted;
+                    return (
+                      <View key={i} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 5 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: dot, marginRight: 8 }} />
+                          <Text style={{ color: theme.colors.text, fontSize: 14 }}>{d.label}</Text>
+                        </View>
+                        <Text style={{ color: theme.colors.textDim, fontSize: 13 }}>{formatMoney(t.amountCents)} · {d.status}</Text>
                       </View>
-                      <Text style={{ color: theme.colors.textDim, fontSize: 13 }}>{formatMoney(t.amountCents)} · {d.status}</Text>
-                    </View>
-                  );
-                })}
-              </>
+                    );
+                  })}
+                </Accordion>
+              </View>
             )}
             {busy && <ActivityIndicator style={{ marginTop: 12 }} />}
               </>
@@ -591,6 +573,38 @@ export default function DealScreen() {
         onSend={sendMessage}
         onAttach={attachImage}
       />
+
+      <SpringSheet visible={helpOpen} onClose={() => setHelpOpen(false)}>
+        <View style={{ padding: 22, paddingBottom: 34 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.text, marginBottom: 4 }}>Help &amp; safety</Text>
+          <Text style={{ color: theme.colors.textDim, marginBottom: 8 }}>Options for this deal.</Text>
+          {deal && (() => {
+            const st = deal.state;
+            const iOut = myRole(deal) === 'buyer' ? deal.buyerHeadedOut : deal.sellerHeadedOut;
+            const row = (key: string, icon: string, title: string, subtitle: string, onPress: () => void, danger = false) => (
+              <Pressable key={key} onPress={() => { setHelpOpen(false); onPress(); }} style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 13, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
+                <Ionicons name={icon as any} size={22} color={danger ? theme.colors.danger : theme.colors.text} style={{ marginTop: 1 }} />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={{ fontWeight: '700', color: danger ? theme.colors.danger : theme.colors.text }}>{title}</Text>
+                  <Text style={{ color: theme.colors.textDim, fontSize: 13, marginTop: 2 }}>{subtitle}</Text>
+                </View>
+              </Pressable>
+            );
+            return (
+              <>
+                {(['AT_MEETUP', 'CONFIRMING'].includes(st) || (st === 'EN_ROUTE' && iOut)) &&
+                  row('leave', 'shield', 'Leave safely', 'Quietly exit the meetup and get to a safe place.', leaveSafely)}
+                {['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(st) &&
+                  row('dispute', 'alert-circle', 'Report a problem', 'Freezes the funds and opens a dispute for review.', openDispute)}
+                {['AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(st) &&
+                  row('block', 'flag', `Report or block ${theirName()}`, 'Stop messages and flag this person to MeetMe.', reportOrBlock)}
+                {['DRAFT', 'AGREED', 'ARMED', 'EN_ROUTE'].includes(st) &&
+                  row('cancel', 'close-circle', 'Cancel deal', st === 'EN_ROUTE' ? 'Backing out now forfeits your $5 deposit.' : 'Everything funded comes back in full.', cancelDeal, true)}
+              </>
+            );
+          })()}
+        </View>
+      </SpringSheet>
     </SafeAreaView>
   );
 }
