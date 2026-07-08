@@ -12,8 +12,8 @@ import { useTheme } from '../../theme';
 import { Badge, Button, Callout, Card, DealCard, MeetupField, PresenceCard, RatingStars, SectionLabel, Stepper, TrustBanner } from '../../ui';
 import { QrScanner } from '../../ui/QrScanner'; // imported directly (keeps native expo-camera out of the ui barrel)
 import { useApp } from '../AppContext';
-import { ProfileModal, RoleBar, RolePick, SpringSheet, TrustModal } from '../components';
-import { countdownTo, describeTransfer, ESCROW_STATES, formatMeetupTime, formatMoney, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, timePresets, turnGuidance } from '../dealLogic';
+import { MeetupTimePicker, ProfileModal, RoleBar, RolePick, SpringSheet, TrustModal } from '../components';
+import { countdownTo, describeTransfer, ESCROW_STATES, formatMeetupTime, formatMoney, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, turnGuidance } from '../dealLogic';
 
 export default function DealScreen() {
   const theme = useTheme();
@@ -264,27 +264,24 @@ export default function DealScreen() {
                     const theirs = role === 'buyer' ? top.minutesSeller : top.minutesBuyer;
                     return (
                       <Card>
-                        <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>Suggested — fair for you both</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                          <Ionicons name={top.tier === 'verified' ? 'shield-checkmark' : 'business'} size={18} color={top.tier === 'verified' ? theme.colors.primary : theme.colors.textDim} />
-                          <Text style={{ fontWeight: '700', color: theme.colors.text, marginLeft: 8, flex: 1 }} numberOfLines={1}>{top.name}</Text>
+                        {/* spot — name is the hero; the "fair" signal is a colored accent, not gray */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Ionicons name={top.tier === 'verified' ? 'shield-checkmark' : 'business'} size={20} color={top.tier === 'verified' ? theme.colors.primary : theme.colors.textDim} />
+                          <Text style={{ fontWeight: '800', fontSize: 16, color: theme.colors.text, marginLeft: 8, flex: 1 }} numberOfLines={1}>{top.name}</Text>
                         </View>
-                        <Text style={{ color: theme.colors.textDim, fontSize: 13, marginBottom: 12 }}>
+                        {mine != null && theirs != null && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: theme.colors.primarySoft, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginTop: 8 }}>
+                            <Ionicons name="car-outline" size={13} color={theme.colors.primary} />
+                            <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 12, marginLeft: 5 }}>Fair · you {mine}m · them {theirs}m</Text>
+                          </View>
+                        )}
+                        <Text style={{ color: theme.colors.textDim, fontSize: 13, marginTop: 8, marginBottom: 14 }}>
                           {top.tier === 'verified' ? 'Verified safe-exchange spot' : top.category}
-                          {mine != null && theirs != null ? ` · you ${mine}m · them ${theirs}m by car` : ''}
                         </Text>
-                        <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>When?</Text>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                          {[{ label: 'ASAP', time: null as number | null }, ...timePresets()].map((p) => {
-                            const active = proposeTime === p.time;
-                            return (
-                              <Pressable key={p.label} onPress={() => setProposeTime(p.time)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: active ? theme.colors.primary : theme.colors.border, backgroundColor: active ? theme.colors.primarySoft : theme.colors.surface }}>
-                                <Text style={{ color: active ? theme.colors.primary : theme.colors.textDim, fontWeight: '600', fontSize: 13 }}>{p.label}</Text>
-                              </Pressable>
-                            );
-                          })}
-                        </View>
-                        <Button label={`Propose to ${oFirst}`} iconName="paper-plane" onPress={() => chooseMeetup(top)} />
+
+                        <MeetupTimePicker value={proposeTime} onChange={setProposeTime} />
+
+                        <Button label={`Propose ${formatMeetupTime(proposeTime)} to ${oFirst}`} iconName="paper-plane" onPress={() => chooseMeetup(top)} style={{ marginTop: 16 }} />
                         <Pressable onPress={openMeetup} style={{ marginTop: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
                           <Ionicons name="options-outline" size={15} color={theme.colors.primary} />
                           <Text style={{ color: theme.colors.primary, marginLeft: 6 }}>Change or set a custom spot</Text>
@@ -560,18 +557,9 @@ export default function DealScreen() {
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 22, paddingBottom: 30 }}>
           <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 4, color: theme.colors.text }}>Arrange the meetup</Text>
           <Text style={{ color: theme.colors.textDim, marginBottom: 14 }}>Safe public spots roughly halfway — balanced by drive time for both of you. Pick a time, then tap a spot to propose it.</Text>
-          <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>When?</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-            {[{ label: 'ASAP', time: null as number | null }, ...timePresets()].map((p) => {
-              const active = proposeTime === p.time;
-              return (
-                <Pressable key={p.label} onPress={() => setProposeTime(p.time)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: active ? theme.colors.primary : theme.colors.border, backgroundColor: active ? theme.colors.primarySoft : theme.colors.surface }}>
-                  <Text style={{ color: active ? theme.colors.primary : theme.colors.textDim, fontWeight: '600', fontSize: 13 }}>{p.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Text style={{ color: theme.colors.textDim, fontSize: 12, marginBottom: 12 }}>Tapping a spot proposes it for <Text style={{ fontWeight: '700', color: theme.colors.text }}>{formatMeetupTime(proposeTime)}</Text> — {theirName()} confirms.</Text>
+          <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: '700', marginBottom: 10 }}>When?</Text>
+          <MeetupTimePicker value={proposeTime} onChange={setProposeTime} />
+          <Text style={{ color: theme.colors.textDim, fontSize: 12, marginTop: 12, marginBottom: 14 }}>Tapping a spot proposes it for <Text style={{ fontWeight: '700', color: theme.colors.text }}>{formatMeetupTime(proposeTime)}</Text> — {theirName()} confirms.</Text>
           <TextInput value={comingFrom} onChangeText={setComingFrom} placeholder="Start somewhere else? (optional)" style={inputStyle(theme)} />
           <Button variant="secondary" label="Search from this address" iconName="search" onPress={shareFromAddress} style={{ marginBottom: 8 }} />
           {!!meetupMsg && <Text style={{ color: theme.colors.textDim, marginBottom: 10 }}>{meetupMsg}</Text>}

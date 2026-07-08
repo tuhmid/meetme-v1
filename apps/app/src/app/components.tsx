@@ -1,5 +1,5 @@
 // Small shared pieces that predate the UI kit — used by the Home and Deal screens.
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { Role, UserProfile } from '../api';
 import { useTheme } from '../theme';
 import { Button, type IconName } from '../ui';
-import { formatMoney, STATE_LABEL } from './dealLogic';
+import { combineDayHour, dayOptions, dayStartOf, formatMoney, hourOf, STATE_LABEL, TIME_OF_DAY } from './dealLogic';
 import type { DemoUsers } from './AppContext';
 
 export const RolePick = ({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) => {
@@ -42,29 +42,27 @@ export function TrustModal({ visible, amount, onClose }: { visible: boolean; amo
   const rows: Array<[IconName, string, string]> = [
     ['lock-closed', 'Held in escrow', `Your ${amount ? formatMoney(amount) : 'payment'} is held by MeetMe — never sent to the other person up front.`],
     ['cash-outline', 'Released only on handoff', 'The seller is paid only after you confirm you got the item, using a one-time release code.'],
-    ['shield-checkmark', 'No-show protection', 'If the other person never shows, you are fully refunded — and their forfeited $5 deposit is paid to you, not to MeetMe.'],
+    ['shield-checkmark', 'No-show protection', 'If the other person never shows, you are fully refunded — and $4 of their $5 deposit is paid to you (MeetMe keeps a $1 recovery fee).'],
     ['card-outline', 'Sellers never pay upfront', 'Sellers just keep a card on file — a $5 hold goes on when they head out, and it is released once the deal completes.'],
     ['arrow-undo', 'Refundable', 'Cancel before the handoff and everything comes back to you.'],
   ];
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.colors.overlay }}>
-        <View style={{ backgroundColor: theme.colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, paddingBottom: 40 }}>
-          <Text style={{ fontSize: 22, fontWeight: '800', color: theme.colors.text, marginBottom: 4 }}>How your money stays safe</Text>
-          <Text style={{ color: theme.colors.textDim, marginBottom: 18 }}>MeetMe holds the payment in escrow, so neither side can be scammed.</Text>
-          {rows.map(([icon, title, body]) => (
-            <View key={title} style={{ flexDirection: 'row', marginBottom: 16 }}>
-              <Ionicons name={icon} size={22} color={theme.colors.primary} style={{ marginTop: 2 }} />
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={{ fontWeight: '700', color: theme.colors.text }}>{title}</Text>
-                <Text style={{ color: theme.colors.textDim }}>{body}</Text>
-              </View>
+    <SpringSheet visible={visible} onClose={onClose}>
+      <ScrollView contentContainerStyle={{ padding: 22, paddingBottom: 34 }}>
+        <Text style={{ fontSize: 22, fontWeight: '800', color: theme.colors.text, marginBottom: 4 }}>How your money stays safe</Text>
+        <Text style={{ color: theme.colors.textDim, marginBottom: 18 }}>MeetMe holds the payment in escrow, so neither side can be scammed.</Text>
+        {rows.map(([icon, title, body]) => (
+          <View key={title} style={{ flexDirection: 'row', marginBottom: 16 }}>
+            <Ionicons name={icon} size={22} color={theme.colors.primary} style={{ marginTop: 2 }} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={{ fontWeight: '700', color: theme.colors.text }}>{title}</Text>
+              <Text style={{ color: theme.colors.textDim }}>{body}</Text>
             </View>
-          ))}
-          <Button label="Got it" onPress={onClose} />
-        </View>
-      </View>
-    </Modal>
+          </View>
+        ))}
+        <Button label="Got it" onPress={onClose} />
+      </ScrollView>
+    </SpringSheet>
   );
 }
 
@@ -158,6 +156,41 @@ export function ProfileModal({ visible, loading, profile, onClose, onReportBlock
           )}
       </ScrollView>
     </SpringSheet>
+  );
+}
+
+/**
+ * Meetup time selector: ASAP, or a day (Today / Tomorrow / weekday, this week) plus a
+ * time of day. Values are midnight-anchored so a chip's selection stays highlighted
+ * (the old moving "in 1 hour" never re-matched). null = ASAP.
+ */
+export function MeetupTimePicker({ value, onChange }: { value: number | null; onChange: (t: number | null) => void }) {
+  const theme = useTheme();
+  const days = useMemo(() => dayOptions(), []); // stable for the life of the picker
+  const selDay = value != null ? dayStartOf(value) : null;
+  const selHour = value != null ? hourOf(value) : null;
+
+  const chip = (label: string, active: boolean, onPress: () => void) => (
+    <Pressable
+      key={label}
+      onPress={onPress}
+      style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: active ? theme.colors.primary : theme.colors.border, backgroundColor: active ? theme.colors.primarySoft : theme.colors.surface }}
+    >
+      <Text style={{ color: active ? theme.colors.primary : theme.colors.textDim, fontWeight: '600', fontSize: 13 }}>{label}</Text>
+    </Pressable>
+  );
+
+  return (
+    <View>
+      <View style={{ flexDirection: 'row', marginBottom: 12 }}>{chip('ASAP · meet now', value === null, () => onChange(null))}</View>
+      <Text style={{ color: theme.colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4, marginBottom: 7 }}>OR PICK A DAY</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }} style={{ marginBottom: 12 }}>
+        {days.map((d) => chip(d.label, selDay === d.date, () => onChange(combineDayHour(d.date, selHour ?? 18))))}
+      </ScrollView>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, opacity: value === null ? 0.45 : 1 }}>
+        {TIME_OF_DAY.map((t) => chip(t.label, value !== null && selHour === t.hour, () => onChange(combineDayHour(selDay ?? days[0].date, t.hour))))}
+      </View>
+    </View>
   );
 }
 

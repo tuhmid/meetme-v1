@@ -200,16 +200,23 @@ export const inputStyle = (theme: Theme) => ({ backgroundColor: theme.colors.sur
 // ---- meetup time helpers (null time = ASAP) ----
 const atHour = (base: number, h: number): number => { const x = new Date(base); x.setHours(h, 0, 0, 0); return x.getTime(); };
 
-/** Quick scheduled-time chips beyond ASAP. */
-export function timePresets(now: number = Date.now()): { label: string; time: number }[] {
-  const tomorrow = now + 24 * 3_600_000;
-  const eveningToday = atHour(now, 18);
-  return [
-    { label: 'In 1 hour', time: now + 3_600_000 },
-    { label: 'This evening', time: eveningToday > now ? eveningToday : atHour(tomorrow, 18) },
-    { label: 'Tomorrow AM', time: atHour(tomorrow, 9) },
-  ];
+/** The next ~6 days as picker chips (Today, Tomorrow, then weekday names), midnight-anchored
+ *  so the chip's value is STABLE across renders (unlike a moving "in 1 hour"). */
+export function dayOptions(now: number = Date.now()): { label: string; date: number }[] {
+  const out: { label: string; date: number }[] = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now + i * 86_400_000);
+    d.setHours(0, 0, 0, 0);
+    out.push({ label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString([], { weekday: 'short' }), date: d.getTime() });
+  }
+  return out;
 }
+export const TIME_OF_DAY: { label: string; hour: number }[] = [
+  { label: 'Morning', hour: 9 }, { label: 'Midday', hour: 12 }, { label: 'Afternoon', hour: 15 }, { label: 'Evening', hour: 18 },
+];
+export const dayStartOf = (t: number): number => atHour(t, 0);
+export const hourOf = (t: number): number => new Date(t).getHours();
+export const combineDayHour = (dayMs: number, hour: number): number => atHour(dayMs, hour);
 
 /** "ASAP" | "Today 3:00 PM" | "Tomorrow 9:00 AM" | "Jul 9, 3:00 PM". */
 export function formatMeetupTime(t: number | null): string {
