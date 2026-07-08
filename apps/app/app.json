@@ -22,7 +22,6 @@
           "locationWhenInUsePermission": "MeetMe uses your location to detect when you and the other person have arrived at the meetup spot."
         }
       ],
-      "expo-notifications",
       "expo-font",
       [
         "expo-camera",
