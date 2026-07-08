@@ -14,7 +14,7 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { api, type Action, type ChatMessage, type Deal, type Invite, type MeetupSpot, type Role, type Transfer, type UserProfile } from '../api';
 import { supabase, SUPABASE_URL } from '../supabase';
-import { registerForPush } from '../push';
+import { consumeInitialNotificationTap, onNotificationTap, registerForPush, type NotificationData } from '../push';
 import { formatMoney, gentle, phoneValid, stateBanner, toE164 } from './dealLogic';
 import { goDeal, goHome } from './nav';
 
@@ -211,6 +211,20 @@ function useAppState() {
       if (session) setInvites((await api.listInvites(session.accessToken)).invites);
     });
   const openDeal = (id: string) => { lastState.current = null; setBanner(''); setGeo(null); setCode(''); setMessages([]); setMsgInput(''); setDealId(id); goDeal(); };
+
+  // Tapping a push jumps straight to the relevant deal (or the invite list). Covers both a
+  // tap while running and one that cold-started the app. Only when signed in.
+  useEffect(() => {
+    if (!session) return;
+    const handle = (data: NotificationData) => {
+      const id = typeof data?.dealId === 'string' ? data.dealId : null;
+      if (id) openDeal(id);
+      else if (data?.inviteToken) { goHome(); void loadHome(); }
+    };
+    void consumeInitialNotificationTap(handle);
+    return onNotificationTap(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
   // Signed image URLs are minted by the API's Supabase host (often localhost, which a
   // phone can't reach) — rewrite the origin to the host the app actually talks to.
   const reachableImage = (url: string | null): string | null =>

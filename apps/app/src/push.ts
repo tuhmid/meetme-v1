@@ -28,3 +28,23 @@ export async function registerForPush(): Promise<string | null> {
     return null; // e.g. no projectId in Expo Go — real token arrives with a dev build
   }
 }
+
+export type NotificationData = Record<string, unknown>;
+
+/** Subscribe to notification TAPS (user opened a push). Returns an unsubscribe fn. */
+export function onNotificationTap(handler: (data: NotificationData) => void): () => void {
+  const sub = Notifications.addNotificationResponseReceivedListener((r) => {
+    handler((r.notification.request.content.data ?? {}) as NotificationData);
+  });
+  return () => sub.remove();
+}
+
+/** Handle a tap that COLD-STARTED the app (notification opened before listeners existed). */
+export async function consumeInitialNotificationTap(handler: (data: NotificationData) => void): Promise<void> {
+  try {
+    const r = await Notifications.getLastNotificationResponseAsync();
+    if (r) handler((r.notification.request.content.data ?? {}) as NotificationData);
+  } catch {
+    /* ignore */
+  }
+}
