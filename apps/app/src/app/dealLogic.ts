@@ -36,7 +36,7 @@ export function nextActions(deal: Deal, role: Role): Action[] {
     const headedOut = role === 'buyer' ? deal.buyerHeadedOut : deal.sellerHeadedOut;
     return headedOut ? [] : [{ type: 'HEAD_OUT', actor: role }];
   }
-  if (s === 'AT_MEETUP' && role === 'buyer' && !deal.codeRevealed) return [{ type: 'REVEAL_CODE' }];
+  // AT_MEETUP: the buyer's code auto-reveals (QR + 6-digit) — no manual "reveal" tap.
   if (s === 'CONFIRMING' && role === 'buyer') return [{ type: 'CONFIRM_RECEIVED' }];
   return [];
 }
@@ -116,9 +116,9 @@ export function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHin
         ? `Funds are locked in escrow. Heading out places a ${formatMoney(deal.commitmentCents)} hold on your card — it's only captured if you don't show.`
         : 'Funds are locked in escrow — nothing moves until the handoff.';
     }
-    else if (s === 'EN_ROUTE') { title = 'Tap arrive when you get there'; body = 'Share your live location on the way so you can find each other.'; }
-    else if (s === 'AT_MEETUP' && role === 'buyer') { title = 'Reveal the release code'; body = 'Check the item first — the code is what releases the money.'; }
-    else if (s === 'AT_MEETUP' && role === 'seller') { title = 'Enter the code the buyer shows you'; body = 'The code confirms the buyer is releasing the payment.'; }
+    else if (s === 'EN_ROUTE') { title = "Head out — we'll track the rest"; body = 'Your live location shares once you head out, so check-in at the spot is automatic.'; }
+    else if (s === 'AT_MEETUP' && role === 'buyer') { title = 'Show your release QR'; body = 'Check the item first — letting the seller scan it releases the money.'; }
+    else if (s === 'AT_MEETUP' && role === 'seller') { title = "Scan the buyer's QR"; body = 'Scan it (or enter the 6-digit code) to confirm the buyer is releasing payment.'; }
     else if (s === 'CONFIRMING') { title = 'Confirm you got the item'; body = "This releases the payment to the seller — confirm only once it's in your hands."; }
     return { tone: 'primary', kicker: 'Your turn', title, body };
   }
@@ -126,7 +126,9 @@ export function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHin
   if (s === 'DRAFT') body = 'They need to accept the terms. Nothing has been charged yet.';
   else if (s === 'AGREED') body = "They're funding the escrow — you'll see it locked here the moment it lands.";
   else if (s === 'EN_ROUTE') body = "You've arrived — wait somewhere public until they get there.";
-  else if (s === 'AT_MEETUP') body = 'Show them the code below. Nothing moves until you confirm you got the item.';
+  else if (s === 'AT_MEETUP') body = role === 'seller'
+    ? "Scan the QR the buyer is showing (or enter their 6-digit code) to release payment."
+    : 'Show the seller your QR below. Nothing moves until you confirm you got the item.';
   else if (s === 'CONFIRMING') body = "Code verified — hand over the item now. If they don't confirm, funds auto-release within 60 minutes; you're protected.";
   return { tone: 'neutral', kicker: 'Waiting', title: `Waiting on ${otherFirst}`, body: demoHint ? `${body} ${demoHint}` : body };
 }

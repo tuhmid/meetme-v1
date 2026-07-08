@@ -15,7 +15,7 @@ export function makeServerCtx(now: number = Date.now()): ServerCtx {
     newId: () => randomUUID(),
     newTxnId: () => randomUUID(),
     newCode: () => {
-      const code = String(randomInt(1000, 10000)); // 4-digit
+      const code = String(randomInt(100000, 1000000)); // 6-digit
       return { code, hash: hashCode(code) };
     },
     verifyCode: (hash, code) => hash !== null && hashCode(code) === hash,

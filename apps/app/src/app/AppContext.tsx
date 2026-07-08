@@ -441,6 +441,24 @@ function useAppState() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deal?.state, deal?.buyerHeadedOut, deal?.sellerHeadedOut, deal?.meetupLat, deal?.meetupLng, dealId, viewAs, demo]);
 
+  // Auto-reveal: the moment the buyer is AT_MEETUP, mint + show the code (QR + digits)
+  // without a manual "reveal" tap. Re-mints if we don't have the plaintext locally
+  // (e.g. the screen was reopened) — safe, since the seller hasn't entered one yet.
+  const revealing = useRef(false);
+  useEffect(() => {
+    if (!deal || dealId == null || deal.state !== 'AT_MEETUP' || myRole(deal) !== 'buyer' || code || revealing.current) return;
+    revealing.current = true;
+    void (async () => {
+      try {
+        const res = await api.act(bearer(), dealId, { type: 'REVEAL_CODE' });
+        if (res.secret) setCode(res.secret.releaseCode);
+        await pullDeal(bearer(), dealId);
+      } catch { /* the buyer can retry by reopening */ }
+      finally { revealing.current = false; }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deal?.state, dealId, viewAs, code]);
+
   // ---- disputes ----
   const openDispute = () =>
     Alert.alert('Report a problem?', 'This freezes the funds and opens a dispute for review.', [

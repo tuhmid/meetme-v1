@@ -1,14 +1,16 @@
 // One deal from draft to done: escrow status, actions, meetup, chat, disputes.
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn, useReducedMotion } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import QRCode from 'react-native-qrcode-svg';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { Role } from '../../api';
 import { supabase } from '../../supabase';
 import { useTheme } from '../../theme';
 import { Badge, Button, Callout, Card, DealCard, MeetupField, PresenceCard, RatingStars, SectionLabel, Stepper, TrustBanner } from '../../ui';
+import { QrScanner } from '../../ui/QrScanner'; // imported directly (keeps native expo-camera out of the ui barrel)
 import { useApp } from '../AppContext';
 import { ProfileModal, RoleBar, RolePick, TrustModal } from '../components';
 import { describeTransfer, ESCROW_STATES, formatMoney, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, turnGuidance } from '../dealLogic';
@@ -17,6 +19,7 @@ export default function DealScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
   const reduceMotion = useReducedMotion();
+  const [scanOpen, setScanOpen] = useState(false); // QR scanner modal (seller side)
   const { duration, spring } = theme.motion;
   // staggered section entrance; plain fade when the user prefers reduced motion
   const enterSection = (i: number) =>
@@ -283,7 +286,7 @@ export default function DealScreen() {
               </Animated.View>
             )}
 
-            {deal.state === 'AT_MEETUP' && role === 'buyer' && deal.codeRevealed && (
+            {deal.state === 'AT_MEETUP' && role === 'buyer' && !!code && (
               <Animated.View
                 // the ta-da moment — a soft spring pop when the code appears
                 entering={reduceMotion
@@ -291,15 +294,31 @@ export default function DealScreen() {
                   : ZoomIn.springify().damping(spring.damping).stiffness(spring.stiffness).mass(spring.mass)}
               >
                 <Card style={{ marginTop: 14, alignItems: 'center' }}>
-                  <Text style={{ fontSize: theme.type.size.xxl, fontWeight: theme.type.weight.bold, letterSpacing: 6, color: theme.colors.primary, textAlign: 'center' }}>{code || '••••'}</Text>
-                  <Text style={{ color: theme.colors.textMuted, fontSize: theme.type.size.xs, marginTop: 8, textAlign: 'center' }}>Show this to the seller — don't text it.</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: theme.type.size.xs, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12 }}>Let the seller scan this</Text>
+                  <View style={{ backgroundColor: '#fff', padding: 14, borderRadius: 12 }}>
+                    <QRCode value={`MEETME:${code}`} size={188} backgroundColor="#fff" color="#000" />
+                  </View>
+                  <Text style={{ color: theme.colors.textDim, fontSize: theme.type.size.xs, marginTop: 14 }}>Or read them this code — don't text it:</Text>
+                  <Text style={{ fontSize: theme.type.size.xxl, fontWeight: theme.type.weight.bold, letterSpacing: 6, color: theme.colors.primary, textAlign: 'center', marginTop: 4 }}>{code}</Text>
                 </Card>
               </Animated.View>
             )}
             {deal.state === 'AT_MEETUP' && role === 'seller' && (
-              <Animated.View entering={enterSection(8)} style={{ marginTop: 14 }}>
-                <TextInput value={code} onChangeText={setCode} placeholder="release code" keyboardType="number-pad" style={inputStyle(theme)} />
-                <Button label="Verify code" iconName="key" onPress={() => act({ type: 'ENTER_CODE', code })} />
+              <Animated.View entering={enterSection(8)} style={{ marginTop: 14, gap: 8 }}>
+                <Button label="Scan buyer's QR" iconName="qr-code" onPress={() => setScanOpen(true)} />
+                <Text style={{ color: theme.colors.textMuted, textAlign: 'center', fontSize: theme.type.size.xs }}>or enter the 6-digit code</Text>
+                <TextInput
+                  value={code}
+                  onChangeText={(t) => {
+                    const digits = t.replace(/\D/g, '').slice(0, 6);
+                    setCode(digits);
+                    if (digits.length === 6) act({ type: 'ENTER_CODE', code: digits }); // auto-submit on the 6th digit
+                  }}
+                  placeholder="123456"
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  style={[inputStyle(theme), { textAlign: 'center', letterSpacing: 6, fontSize: theme.type.size.lg }]}
+                />
               </Animated.View>
             )}
 
@@ -483,6 +502,12 @@ export default function DealScreen() {
           </View>
         </View>
       </Modal>
+
+      <QrScanner
+        visible={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onScan={(scanned) => { setScanOpen(false); setCode(scanned); act({ type: 'ENTER_CODE', code: scanned }); }}
+      />
     </SafeAreaView>
   );
 }

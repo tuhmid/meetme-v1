@@ -23,7 +23,13 @@
         }
       ],
       "expo-notifications",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "MeetMe uses the camera to scan the buyer's release QR at handoff."
+        }
+      ]
     ]
   }
 }
