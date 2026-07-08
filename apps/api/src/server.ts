@@ -19,6 +19,7 @@ import {
   type Repo,
   type ServerCtx,
 } from '@meetme/server';
+import { sendTwilioSms, verifySendSmsHook } from './sms';
 
 export interface ServerDeps {
   repo: Repo;
@@ -40,6 +41,16 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: 14 * 1024 * 1024 }); // headroom for base64 image uploads
   const push = deps.push ?? NoopPushSender;
 
+  // Keep the raw JSON bytes around too — the Supabase send-sms hook signs over the exact body.
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    (req as unknown as { rawBody?: string }).rawBody = body as string;
+    try {
+      done(null, body ? JSON.parse(body as string) : {});
+    } catch (err) {
+      done(err as Error);
+    }
+  });
+
   // Auth: a real Supabase JWT (`Bearer <jwt>` -> verifyToken) OR, when allowDev,
   // the demo shortcut `Bearer dev:<userId>`. Same resolved userId either way.
   async function resolveCaller(req: FastifyRequest): Promise<string | null> {
@@ -56,6 +67,33 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const r = await signup(deps.repo, { phone, name, isVoip: !!isVoip }, deps.makeCtx());
     if (!r.ok) return reply.code(400).send({ error: r.reason });
     return { userId: r.user.id, name: r.user.name };
+  });
+
+  // Supabase "Send SMS" auth hook: GoTrue posts { user:{phone}, sms:{otp} } here and we relay
+  // the code through Twilio's direct Messages API (trial-friendly — no Messaging Service needed).
+  app.post('/auth/hooks/send-sms', async (req, reply) => {
+    const secret = process.env.SEND_SMS_HOOK_SECRET;
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const from = process.env.TWILIO_FROM_NUMBER;
+    if (!secret || !accountSid || !authToken || !from) {
+      return reply.code(500).send({ error: { http_code: 500, message: 'sms hook not configured' } });
+    }
+    const rawBody = (req as unknown as { rawBody?: string }).rawBody ?? '';
+    if (!verifySendSmsHook(secret, req.headers, rawBody)) {
+      return reply.code(401).send({ error: { http_code: 401, message: 'invalid signature' } });
+    }
+    const { user, sms } = (req.body ?? {}) as { user?: { phone?: string }; sms?: { otp?: string } };
+    const phone = user?.phone;
+    const otp = sms?.otp;
+    if (!phone || !otp) return reply.code(400).send({ error: { http_code: 400, message: 'missing phone or otp' } });
+    const to = phone.startsWith('+') ? phone : `+${phone}`;
+    try {
+      await sendTwilioSms({ accountSid, authToken, from }, to, `Your MeetMe code is ${otp}`);
+    } catch (err) {
+      return reply.code(500).send({ error: { http_code: 500, message: `sms send failed: ${(err as Error).message}` } });
+    }
+    return {};
   });
 
   app.post('/deals', async (req, reply) => {
