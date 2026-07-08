@@ -3,7 +3,7 @@
 // far better than an inline block ever did.
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { inputStyle } from './dealLogic';
@@ -51,11 +51,11 @@ export function ChatModal({ visible, onClose, title, messages, myId, input, setI
               const mine = m.senderId === myId;
               const hasImage = !!m.imageUrl;
               // Stable key so a poll refresh doesn't remount (and re-animate) existing bubbles —
-              // only genuinely new messages spring in.
+              // only genuinely new messages ease in.
               return (
                 <Animated.View
                   key={`${m.createdAt}-${m.senderId}-${i}`}
-                  entering={FadeInDown.springify().damping(16).stiffness(190).mass(0.6)}
+                  entering={FadeInDown.duration(240).easing(Easing.out(Easing.cubic))}
                   style={{ alignSelf: mine ? 'flex-end' : 'flex-start', backgroundColor: mine ? theme.colors.primary : theme.colors.surfaceAlt, borderRadius: theme.radius.md, padding: hasImage ? 4 : 0, paddingHorizontal: hasImage ? 4 : 12, paddingVertical: hasImage ? 4 : 8, marginVertical: 3, maxWidth: '80%' }}
                 >
                   {hasImage && <Image source={{ uri: m.imageUrl! }} style={{ width: 220, height: 220, borderRadius: theme.radius.sm }} resizeMode="cover" />}

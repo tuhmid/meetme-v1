@@ -1,7 +1,7 @@
 // One deal from draft to done: escrow status, actions, meetup, chat, disputes.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn, useReducedMotion } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, FadeOut, ZoomIn, useReducedMotion, withTiming } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
@@ -15,6 +15,29 @@ import { ChatModal } from '../ChatModal';
 import { useApp } from '../AppContext';
 import { MeetupTimePicker, ProfileModal, RoleBar, RolePick, SpringSheet, TrustModal } from '../components';
 import { countdownTo, describeTransfer, ESCROW_STATES, formatMeetupTime, formatMoney, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, turnGuidance } from '../dealLogic';
+
+// Calm entrances for the floating chat bubble + its unread badge: fade + a small settle-in
+// scale on an ease-out curve. Presence without the spring overshoot that read as cartoonish.
+const bubbleEnter = () => {
+  'worklet';
+  return {
+    initialValues: { opacity: 0, transform: [{ scale: 0.86 }] },
+    animations: {
+      opacity: withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) }),
+      transform: [{ scale: withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) }) }],
+    },
+  };
+};
+const badgeEnter = () => {
+  'worklet';
+  return {
+    initialValues: { opacity: 0, transform: [{ scale: 0.6 }] },
+    animations: {
+      opacity: withTiming(1, { duration: 130, easing: Easing.out(Easing.quad) }),
+      transform: [{ scale: withTiming(1, { duration: 190, easing: Easing.out(Easing.cubic) }) }],
+    },
+  };
+};
 
 export default function DealScreen() {
   const theme = useTheme();
@@ -493,7 +516,7 @@ export default function DealScreen() {
 
       {/* Floating chat bubble — always one tap away (messaging is the whole point). */}
       {deal && ['AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && !chatOpen && (
-        <Animated.View entering={reduceMotion ? FadeIn.duration(200) : ZoomIn.springify().damping(14).stiffness(180)} style={{ position: 'absolute', right: 18, bottom: 24 }}>
+        <Animated.View entering={reduceMotion ? FadeIn.duration(200) : bubbleEnter} style={{ position: 'absolute', right: 18, bottom: 24 }}>
           <Pressable
             onPress={() => setChatOpen(true)}
             style={({ pressed }) => ({
@@ -506,7 +529,7 @@ export default function DealScreen() {
             {unread > 0 && (
               <Animated.View
                 key={unread}
-                entering={reduceMotion ? FadeIn.duration(150) : ZoomIn.springify().damping(11).stiffness(220)}
+                entering={reduceMotion ? FadeIn.duration(150) : badgeEnter}
                 style={{ position: 'absolute', top: -3, right: -3, minWidth: 22, height: 22, borderRadius: 11, backgroundColor: theme.colors.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, borderWidth: 2, borderColor: theme.colors.bg }}
               >
                 <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>{unread > 9 ? '9+' : unread}</Text>
