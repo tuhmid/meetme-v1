@@ -1,5 +1,5 @@
 // One deal from draft to done: escrow status, actions, meetup, chat, disputes.
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn, useReducedMotion } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
@@ -37,6 +37,20 @@ export default function DealScreen() {
     openProfile, openMeetup, propose, resolveDispute, submitStatement,
     shareFromAddress, chooseMeetup, useCustomSpot,
   } = useApp();
+
+  // Seller's release code auto-submits — typed, scanned, OR pre-filled (demo shares the
+  // buyer's revealed code). No submit button. The ref stops a wrong code from re-firing
+  // in a loop; editing the code clears the guard so a corrected code submits.
+  const submittedCode = useRef<string | null>(null);
+  const sellerAtMeetup = !!deal && deal.state === 'AT_MEETUP' && myRole(deal) === 'seller';
+  useEffect(() => {
+    if (!sellerAtMeetup) { submittedCode.current = null; return; }
+    if (code.length === 6 && submittedCode.current !== code) {
+      submittedCode.current = code;
+      act({ type: 'ENTER_CODE', code });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sellerAtMeetup, code]);
 
   // initial pull — was gated on `phase === 'deal'`
   useFocusEffect(
@@ -310,15 +324,11 @@ export default function DealScreen() {
                 <Text style={{ color: theme.colors.textMuted, textAlign: 'center', fontSize: theme.type.size.xs }}>or enter the 6-digit code</Text>
                 <TextInput
                   value={code}
-                  onChangeText={(t) => {
-                    const digits = t.replace(/\D/g, '').slice(0, 6);
-                    setCode(digits);
-                    if (digits.length === 6) act({ type: 'ENTER_CODE', code: digits }); // auto-submit on the 6th digit
-                  }}
+                  onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 6))} // effect auto-submits at 6 digits
                   placeholder="123456"
                   keyboardType="number-pad"
                   maxLength={6}
-                  style={[inputStyle(theme), { textAlign: 'center', letterSpacing: 6, fontSize: theme.type.size.lg }]}
+                  style={[inputStyle(theme), { textAlign: 'center', letterSpacing: 4, fontSize: theme.type.size.lg }]}
                 />
               </Animated.View>
             )}
@@ -410,7 +420,9 @@ export default function DealScreen() {
               </Animated.View>
             )}
 
-            {['ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(deal.state) && (
+            {/* only once you're actually en route to / at the meetup — not while still ARMED */}
+            {(['AT_MEETUP', 'CONFIRMING'].includes(deal.state) ||
+              (deal.state === 'EN_ROUTE' && (role === 'buyer' ? deal.buyerHeadedOut : deal.sellerHeadedOut))) && (
               <Animated.View entering={enterSection(10)}>
                 <Button variant="dangerGhost" iconName="shield" label="Feel unsafe? Leave safely" onPress={leaveSafely} style={{ marginTop: 10 }} />
               </Animated.View>
@@ -503,7 +515,7 @@ export default function DealScreen() {
       <QrScanner
         visible={scanOpen}
         onClose={() => setScanOpen(false)}
-        onScan={(scanned) => { setScanOpen(false); setCode(scanned); act({ type: 'ENTER_CODE', code: scanned }); }}
+        onScan={(scanned) => { setScanOpen(false); setCode(scanned); }} // effect submits once code is set
       />
     </SafeAreaView>
   );

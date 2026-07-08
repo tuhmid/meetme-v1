@@ -24,6 +24,7 @@ async function driveTo(state: 'EN_ROUTE' | 'CONFIRMING', railCfg: ConstructorPar
   await exec(s.user.id, { type: 'ACCEPT_TERMS' });
   await exec(b.user.id, { type: 'FUND' }); // arms the deal directly
   await exec(b.user.id, { type: 'HEAD_OUT', actor: 'buyer' }); // -> EN_ROUTE
+  await exec(s.user.id, { type: 'HEAD_OUT', actor: 'seller' }); // both commit to travel (arms the no-show clock)
   if (state === 'EN_ROUTE') {
     if (arrivals === 'buyer' || arrivals === 'both') await exec(b.user.id, { type: 'ARRIVE', party: 'buyer' });
     if (arrivals === 'seller' || arrivals === 'both') await exec(s.user.id, { type: 'ARRIVE', party: 'seller' });
@@ -40,12 +41,12 @@ async function driveTo(state: 'EN_ROUTE' | 'CONFIRMING', railCfg: ConstructorPar
 
 describe('worker: dueTransition (pure timing)', () => {
   const base = (over: Partial<DealRecord['deal']> & { state: DealRecord['deal']['state'] }, updatedAt: number): DealRecord => ({
-    deal: { buyerArrived: false, sellerArrived: false, ...(over as any) } as any,
+    deal: { buyerArrived: false, sellerArrived: false, buyerHeadedOut: true, sellerHeadedOut: true, ...(over as any) } as any,
     version: 1,
     updatedAt,
   });
 
-  it('no-show fires only for the ABSENT party, only after the window', () => {
+  it('no-show fires only for the ABSENT party, only after the window, only if both headed out', () => {
     const now = 1_000_000_000;
     const one = base({ state: 'EN_ROUTE', buyerArrived: true, sellerArrived: false }, now - DEFAULT_WINDOWS.noShowMs - 1);
     expect(dueTransition(one, now, DEFAULT_WINDOWS)).toEqual({ type: 'EXPIRE_NO_SHOW', noShow: 'seller' });
@@ -55,6 +56,10 @@ describe('worker: dueTransition (pure timing)', () => {
     // neither arrived: no clear fault -> nothing
     const neither = base({ state: 'EN_ROUTE', buyerArrived: false, sellerArrived: false }, now - DEFAULT_WINDOWS.noShowMs - 1);
     expect(dueTransition(neither, now, DEFAULT_WINDOWS)).toBeNull();
+    // only one party committed to travel (headed out): no forfeit — you can't be
+    // stood up into a forfeit by someone who never agreed to head out
+    const onlyBuyerOut = base({ state: 'EN_ROUTE', buyerArrived: true, sellerArrived: false, sellerHeadedOut: false }, now - DEFAULT_WINDOWS.noShowMs - 1);
+    expect(dueTransition(onlyBuyerOut, now, DEFAULT_WINDOWS)).toBeNull();
   });
 
   it('auto-release fires after the confirm window', () => {

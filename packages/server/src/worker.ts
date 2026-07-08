@@ -31,7 +31,11 @@ export function dueTransition(rec: DealRecord, now: number, w: WorkerWindows): A
   const { deal, updatedAt } = rec;
   const age = now - updatedAt;
 
-  if (deal.state === 'EN_ROUTE' && age >= w.noShowMs) {
+  // A no-show only counts once BOTH sides committed to travel (both tapped "heading
+  // out"). Without this, one party could head out, arrive, and run the other's clock
+  // down to a forfeit even though they never agreed to meet then. Requiring both
+  // head-outs means you can only be forfeited if you committed and then didn't arrive.
+  if (deal.state === 'EN_ROUTE' && age >= w.noShowMs && deal.buyerHeadedOut && deal.sellerHeadedOut) {
     if (deal.buyerArrived && !deal.sellerArrived) return { type: 'EXPIRE_NO_SHOW', noShow: 'seller' };
     if (deal.sellerArrived && !deal.buyerArrived) return { type: 'EXPIRE_NO_SHOW', noShow: 'buyer' };
     return null; // neither arrived -> no clear fault; leave for a manual cancel
