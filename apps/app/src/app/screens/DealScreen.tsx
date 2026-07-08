@@ -9,7 +9,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { Role } from '../../api';
 import { supabase } from '../../supabase';
 import { useTheme } from '../../theme';
-import { Accordion, Badge, Button, Callout, Card, DealCard, MeetupField, PresenceCard, RatingStars, SectionLabel, Stepper, TrustBanner } from '../../ui';
+import { Accordion, Button, Callout, Card, DealCard, MeetupField, PresenceCard, RatingStars, SectionLabel, Stepper } from '../../ui';
 import { QrScanner } from '../../ui/QrScanner'; // imported directly (keeps native expo-camera out of the ui barrel)
 import { ChatModal } from '../ChatModal';
 import { useApp } from '../AppContext';
@@ -167,46 +167,9 @@ export default function DealScreen() {
               </Animated.View>
             )}
 
-            {!hideTrustBanner && (
-              <Animated.View entering={enterSection(3)}>
-                <Pressable onPress={() => setShowTrust(true)} style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}>
-                  {/* keyed on state so the held → released swap crossfades */}
-                  <Animated.View key={deal.state} entering={crossfade}>
-                    {released || ESCROW_STATES.includes(deal.state) ? (
-                      <TrustBanner amountCents={deal.amountCents} released={released} tappable />
-                    ) : (
-                      // pre-funding: nothing is held yet — speak in the future tense
-                      <TrustBanner
-                        amountCents={deal.amountCents}
-                        title="Escrow protection"
-                        subtitle={`${formatMoney(deal.amountCents)} will be held by MeetMe until you both confirm the handoff.`}
-                        tappable
-                      />
-                    )}
-                  </Animated.View>
-                </Pressable>
-              </Animated.View>
-            )}
-
-            {(ESCROW_STATES.includes(deal.state) || !!deal.meetupName) && (
-              <Animated.View entering={enterSection(4)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                {ESCROW_STATES.includes(deal.state) && (
-                  <Animated.View entering={FadeIn.duration(duration.fast)}>
-                    <Badge label="Escrow funded" tone="success" iconName="lock-closed" />
-                  </Animated.View>
-                )}
-                {!!deal.meetupName && (
-                  <Animated.View entering={FadeIn.duration(duration.fast).delay(30)}>
-                    {deal.meetupCustom
-                      ? <Badge label="Custom spot" tone="warning" iconName="alert-circle" />
-                      : <Badge label="Safe spot set" tone="primary" iconName="shield-checkmark" />}
-                  </Animated.View>
-                )}
-              </Animated.View>
-            )}
-
+            {/* The focus: what's happening now + the one thing to do. */}
             {guidance && (
-              <Animated.View entering={enterSection(5)} style={{ marginTop: 12 }}>
+              <Animated.View entering={enterSection(3)} style={{ marginTop: 4 }}>
                 {/* keyed on state so new guidance crossfades in */}
                 <Animated.View key={deal.state} entering={crossfade}>
                   <Callout tone={guidance.tone} kicker={guidance.kicker} title={guidance.title} body={guidance.body} />
@@ -215,10 +178,34 @@ export default function DealScreen() {
             )}
 
             {actions.length > 0 && (
-              <Animated.View entering={enterSection(6)} style={{ marginTop: 12, gap: 8 }}>
+              <Animated.View entering={enterSection(4)} style={{ marginTop: 12, gap: 8 }}>
                 {actions.map((a, i) => (
                   <Button key={i} label={labelFor(a, deal)} iconName={iconFor(a)} onPress={() => act(a)} />
                 ))}
+              </Animated.View>
+            )}
+
+            {/* Reassurance, kept slim and secondary — one tappable line, not a big card. */}
+            {!hideTrustBanner && (
+              <Animated.View entering={enterSection(5)}>
+                <Pressable
+                  onPress={() => setShowTrust(true)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row', alignItems: 'center', marginTop: 12,
+                    backgroundColor: theme.colors.successSoft, borderWidth: 1, borderColor: theme.colors.primaryBorder,
+                    borderRadius: theme.radius.lg, paddingVertical: 11, paddingHorizontal: 14, opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Ionicons name={released ? 'checkmark-done-circle' : 'shield-checkmark'} size={19} color={released ? theme.colors.success : theme.colors.primary} />
+                  <Text style={{ flex: 1, marginLeft: 10, color: theme.colors.text, fontWeight: '600', fontSize: 13.5 }} numberOfLines={1}>
+                    {released
+                      ? `${formatMoney(deal.amountCents)} released to the seller`
+                      : ESCROW_STATES.includes(deal.state)
+                        ? `${formatMoney(deal.amountCents)} held safely in escrow`
+                        : `${formatMoney(deal.amountCents)} protected by escrow`}
+                  </Text>
+                  <Text style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>How it works ›</Text>
+                </Pressable>
               </Animated.View>
             )}
 

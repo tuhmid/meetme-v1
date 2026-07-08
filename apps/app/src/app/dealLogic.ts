@@ -29,7 +29,8 @@ export function nextActions(deal: Deal, role: Role): Action[] {
   const s = deal.state;
   if (s === 'DRAFT' && role === 'seller') return [{ type: 'ACCEPT_TERMS' }];
   if (s === 'AGREED' && role === 'buyer') return [{ type: 'FUND' }];
-  if (s === 'ARMED') return [{ type: 'HEAD_OUT', actor: role }];
+  // Can't head out until the meetup (spot + time) is confirmed — that's what arrival runs on.
+  if (s === 'ARMED') return deal.meetupConfirmed ? [{ type: 'HEAD_OUT', actor: role }] : [];
   if (s === 'EN_ROUTE') {
     // Arrival is auto-detected (geofence) — no manual "I've arrived". The second party
     // still taps their own head-out (for the seller this also places the card hold).
@@ -104,6 +105,10 @@ export const presenceStatus = (arrived: boolean, headedOut: boolean, distanceM: 
 export function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHint: string | null): { tone: Tone; kicker: string; title: string; body: string } | null {
   const s = deal.state;
   if (!['DRAFT', 'AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING'].includes(s)) return null;
+  // Once funded, the shared task before heading out is agreeing on the meetup — either side can act.
+  if (s === 'ARMED' && !deal.meetupConfirmed) {
+    return { tone: 'primary', kicker: 'Your turn', title: 'Agree on where & when', body: 'Propose a meetup spot + time (or ASAP) below. Once you both confirm, you can head out.' };
+  }
   const myTurn = nextActions(deal, role).length > 0 || (s === 'AT_MEETUP' && role === 'seller');
   if (myTurn) {
     let title = 'Your move';
