@@ -25,7 +25,7 @@ export default function LoginScreen() {
       </View>
       <Text style={{ color: theme.colors.textDim, marginTop: 12, marginBottom: 22 }}>Sign in with your phone</Text>
       <TextInput value={name} onChangeText={setName} placeholder="Your name (optional)" autoComplete="name" textContentType="name" style={inputStyle(theme)} />
-      <TextInput value={phone} onChangeText={(t) => setPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" maxLength={12} style={inputStyle(theme)} />
+      <TextInput value={phone} onChangeText={(t) => setPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" style={inputStyle(theme)} />
       {!otpSent ? (
         <Button label="Send code" onPress={sendCode} loading={busy} disabled={busy || phone.length < 12} style={{ marginTop: 4 }} />
       ) : (

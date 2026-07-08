@@ -128,7 +128,7 @@ export default function HomeScreen() {
             })()}
             {session ? (
               <>
-                <TextInput value={cpPhone} onChangeText={(t) => setCpPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" maxLength={12} style={inputStyle(theme)} />
+                <TextInput value={cpPhone} onChangeText={(t) => setCpPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" style={inputStyle(theme)} />
                 <View style={{ flexDirection: 'row', marginBottom: 12 }}>
                   <RolePick label="I'm buying" active={inviteRole === 'buyer'} onPress={() => setInviteRole('buyer')} />
                   <View style={{ width: 8 }} />
