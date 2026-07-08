@@ -113,7 +113,7 @@ export function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHin
     else if (s === 'ARMED') {
       title = "Head out when you're ready";
       body = role === 'seller'
-        ? `Funds are locked in escrow. Heading out places a ${formatMoney(deal.commitmentCents)} hold on your card — it's only captured if you don't show.`
+        ? `Funds are locked in escrow. A ${formatMoney(deal.commitmentCents)} hold on your card backs this meetup — only captured if you don't show.`
         : 'Funds are locked in escrow — nothing moves until the handoff.';
     }
     else if (s === 'EN_ROUTE') { title = "Head out — we'll track the rest"; body = 'Your live location shares once you head out, so check-in at the spot is automatic.'; }

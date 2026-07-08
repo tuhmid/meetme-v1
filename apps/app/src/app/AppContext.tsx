@@ -96,7 +96,7 @@ function useAppState() {
     const deposit = formatMoney(depositCents);
     Alert.alert(
       'Add a card to continue',
-      `You're only ever charged if you don't show up — a ${deposit} deposit hold is placed when you head out, released when the deal completes. (Test mode: a fake Visa is used.)`,
+      `You're only ever charged if you don't show up — a ${deposit} hold backs your commitment to the meetup and is released when the deal completes. (Test mode: a fake Visa is used.)`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Add card', onPress: () => run(async () => { await api.addPaymentMethod(bearer()); await retry(); }) },
@@ -439,7 +439,7 @@ function useAppState() {
       if (session && !(await ensureLiveLocation())) { setErr('Turn on location to head out — MeetMe uses it to detect arrival.'); return; }
       const deposit = formatMoney(deal.commitmentCents);
       const msg = myRole(deal) === 'seller'
-        ? `Heading out places a ${deposit} hold on your card. You're only charged it if you don't show — it's released the moment the deal completes.`
+        ? `A ${deposit} hold on your card backs this meetup — you're only charged it if you don't show, and it's released the moment the deal completes.`
         : `Your ${deposit} deposit is in escrow. Once you head out, backing out counts as a no-show and forfeits it.`;
       Alert.alert('Head to the meetup?', msg, [
         { text: 'Not yet', style: 'cancel' },

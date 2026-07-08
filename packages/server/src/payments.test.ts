@@ -84,6 +84,7 @@ describe('M2 seller commitment hold (card on file)', () => {
     ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
     ok(await exec(buyer.id, { type: 'FUND' }));
     ok(await exec(seller.id, { type: 'HEAD_OUT', actor: 'seller' }));
+    ok(await exec(buyer.id, { type: 'HEAD_OUT', actor: 'buyer' })); // both committed → seller's back-out is a real forfeit
     const holdId = (await repo.getDeal(dealId))!.deal.sellerHoldId!;
 
     ok(await exec(seller.id, { type: 'CANCEL', actor: 'seller' })); // self-declared no-show
@@ -221,6 +222,45 @@ describe('dispute-release respects the settlement gate', () => {
     ok(await exec(null, { type: 'RESOLVE_DISPUTE', outcome: 'release' }, 'admin'));
     expect((await repo.getDeal(dealId))!.deal.state).toBe('DISPUTE_RESOLVED');
     expect((await repo.listTransfers(dealId)).some((t) => t.direction === 'payout_seller')).toBe(true);
+  });
+
+  it('blocks a resolve-to-SPLIT while the buyer ACH is still pending (split pays the seller too)', async () => {
+    const { repo, ctx, buyer, seller, dealId } = await setup();
+    const rail = new FakeRail({ fundingRail: 'ach' }); // pending
+    const exec = (id: string | null, a: Action, channel: 'user' | 'admin' = 'user') =>
+      executeAction(repo, rail, { dealId, action: a, callerUserId: id, channel }, ctx);
+    ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
+    ok(await exec(buyer.id, { type: 'FUND' }));
+    ok(await exec(buyer.id, { type: 'OPEN_DISPUTE', actor: 'buyer' }));
+
+    const blocked = await exec(null, { type: 'RESOLVE_DISPUTE', outcome: 'split' }, 'admin');
+    expect(blocked.ok).toBe(false);
+    expect(!blocked.ok && blocked.code).toBe('funding_not_settled'); // split pays the seller from unsettled escrow — must wait
+    expect((await repo.listTransfers(dealId)).some((t) => t.direction === 'payout_seller')).toBe(false);
+
+    await markFundingSettled(repo, dealId);
+    ok(await exec(null, { type: 'RESOLVE_DISPUTE', outcome: 'split' }, 'admin'));
+    expect((await repo.listTransfers(dealId)).some((t) => t.direction === 'payout_seller')).toBe(true);
+  });
+});
+
+describe('M2 scheduled meetup — commitment hold lifecycle', () => {
+  it('releases the seller hold (placed at CONFIRM) when a scheduled deal is cancelled before heading out', async () => {
+    const { repo, ctx, buyer, seller, dealId } = await setup();
+    const rail = new FakeRail({ fundingRail: 'rtp', instantSettle: true });
+    const exec = (id: string, a: Action) => executeAction(repo, rail, { dealId, action: a, callerUserId: id, channel: 'user' }, ctx);
+    ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
+    ok(await exec(buyer.id, { type: 'FUND' }));
+    // scheduled meetup: the seller's $5 hold is placed at CONFIRM — before anyone heads out
+    ok(await exec(seller.id, { type: 'PROPOSE_MEETUP', actor: 'seller', name: 'Precinct', lat: 1, lng: 2, custom: false, time: ctx.now + 60 * 60_000 }));
+    ok(await exec(buyer.id, { type: 'CONFIRM_MEETUP', actor: 'buyer' }));
+    const holdId = (await repo.getDeal(dealId))!.deal.sellerHoldId!;
+    expect(rail.holds.get(holdId)!.status).toBe('held'); // hold exists, deal still ARMED, nobody headed out
+
+    ok(await exec(buyer.id, { type: 'CANCEL', actor: 'buyer' })); // cancel before heading out
+    expect((await repo.getDeal(dealId))!.deal.state).toBe('REFUNDED');
+    expect(rail.holds.get(holdId)!.status).toBe('released'); // NOT orphaned on the seller's card
+    expect((await repo.getDeal(dealId))!.deal.sellerHoldId).toBeNull();
   });
 });
 

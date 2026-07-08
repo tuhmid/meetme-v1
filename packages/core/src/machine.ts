@@ -144,8 +144,11 @@ function faultEffects(deal: Deal, atFault: Role): SideEffect[] {
   return effects;
 }
 
-/** A hold can exist only once the seller has headed out; release it on any non-capture ending. */
-const holdRelease = (deal: Deal): SideEffect[] => (deal.sellerHeadedOut ? [{ type: 'release_seller_hold' }] : []);
+/** Release the seller's commitment hold on any non-capture ending. A hold exists once
+ *  the seller heads out (ASAP) OR confirms a scheduled meetup (placed at CONFIRM_MEETUP).
+ *  The server no-ops this if no hold was actually placed (it guards on sellerHoldId). */
+const holdRelease = (deal: Deal): SideEffect[] =>
+  deal.sellerHeadedOut || (deal.meetupConfirmed && deal.meetupTime != null) ? [{ type: 'release_seller_hold' }] : [];
 
 
 // --- helpers to assemble results -------------------------------------------
@@ -231,6 +234,7 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
       // it's locked — so a forfeit can only ever run against a time both accepted.
       if (!['DRAFT', 'AGREED', 'FUNDED', 'ARMED'].includes(deal.state)) return reject(`cannot arrange the meetup from ${deal.state}`);
       if (!action.name.trim()) return reject('meetup name required');
+      if (action.time != null && action.time <= ctx.now) return reject('meetup time must be in the future');
       const when = action.time == null ? ' — meet ASAP' : '';
       return mutate(
         deal,
@@ -380,11 +384,23 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
       if (deal.state === 'FUNDED' || deal.state === 'ARMED') {
         return transition(deal, 'REFUNDED', ev(ctx, action.actor, 'cancelled', `${action.actor} cancelled before heading out — everyone refunded in full.`), {
           ledger: refundAllLedger(deal, ctx),
+          effects: holdRelease(deal), // scheduled deals hold at confirm — let it go
         });
       }
-      // Once you've headed out, backing out is a no-show: you forfeit your $5 deposit
-      // to the other side, who is made whole (same as EXPIRE_NO_SHOW, but self-declared).
       if (deal.state === 'EN_ROUTE') {
+        // You only forfeit if the OTHER side also committed to travel (headed out). If
+        // they never headed out (ghosted you), backing out is a no-fault full refund —
+        // you can't be forfeited against someone who never committed.
+        const otherHeadedOut = action.actor === 'buyer' ? deal.sellerHeadedOut : deal.buyerHeadedOut;
+        if (!otherHeadedOut) {
+          const note = `${action.actor} backed out — the other person never headed out, so everyone was refunded in full.`;
+          return transition(deal, 'REFUNDED', ev(ctx, action.actor, 'cancelled', note), {
+            ledger: refundAllLedger(deal, ctx),
+            effects: holdRelease(deal),
+            patch: { resolutionNote: note },
+          });
+        }
+        // both headed out → self-declared no-show: you forfeit your deposit to the other side.
         const note = `${action.actor} backed out after heading out and forfeited their ${usd(deal.commitmentCents)} deposit to the other party.`;
         return transition(deal, 'EXPIRED_NO_SHOW', ev(ctx, action.actor, 'backed_out', note), {
           ledger: noShowLedger(deal, action.actor, ctx),

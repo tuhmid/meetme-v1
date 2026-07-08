@@ -9,15 +9,17 @@ export type ExecResult = HandlerResult | { ok: false; code: 'risk_declined' | 'f
 const otherRole = (r: Role): Role => (r === 'buyer' ? 'seller' : 'buyer');
 
 /**
- * Does this action RELEASE money to the seller (so it must wait for settled funds)?
- * Covers direct confirm/auto-release AND a dispute that resolves to 'release' — both
- * admin (`RESOLVE_DISPUTE`) and self-service (`PROPOSE_RESOLUTION`, when the other
- * side already proposed 'release' so this action completes the agreement).
+ * Does this action credit the seller from escrow (so it must wait for settled funds)?
+ * Covers direct confirm/auto-release AND a dispute that resolves to 'release' OR 'split'
+ * (a split also pays the seller half the price from the buyer's escrowed funds) — both
+ * admin (`RESOLVE_DISPUTE`) and self-service (`PROPOSE_RESOLUTION`, when the other side
+ * already proposed the same outcome so this action completes the agreement).
  */
 function releasesToSeller(action: Action, deal: Deal): boolean {
+  const paysSeller = (o: 'release' | 'refund' | 'split') => o === 'release' || o === 'split';
   if (action.type === 'CONFIRM_RECEIVED' || action.type === 'AUTO_RELEASE') return true;
-  if (action.type === 'RESOLVE_DISPUTE') return action.outcome === 'release';
-  if (action.type === 'PROPOSE_RESOLUTION') return action.outcome === 'release' && deal.disputeProposals[otherRole(action.actor)] === 'release';
+  if (action.type === 'RESOLVE_DISPUTE') return paysSeller(action.outcome);
+  if (action.type === 'PROPOSE_RESOLUTION') return paysSeller(action.outcome) && deal.disputeProposals[otherRole(action.actor)] === action.outcome;
   return false;
 }
 

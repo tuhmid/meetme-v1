@@ -35,7 +35,7 @@ export const ALLOWED_TRANSITIONS: Record<DealState, DealState[]> = {
   // transitions INTO it anymore; a legacy FUNDED deal can still cancel/refund.
   FUNDED: ['ARMED', 'CANCELLED', 'REFUNDED'],
   ARMED: ['EN_ROUTE', 'DISPUTED', 'EXPIRED_NO_SHOW', 'CANCELLED', 'REFUNDED'],
-  EN_ROUTE: ['AT_MEETUP', 'DISPUTED', 'EXPIRED_NO_SHOW'],
+  EN_ROUTE: ['AT_MEETUP', 'DISPUTED', 'EXPIRED_NO_SHOW', 'REFUNDED'], // REFUNDED: no-fault back-out when the other side never headed out
   AT_MEETUP: ['CONFIRMING', 'DISPUTED'],
   CONFIRMING: ['RELEASED', 'DISPUTED'],
   RELEASED: [],

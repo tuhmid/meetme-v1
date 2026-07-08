@@ -168,6 +168,14 @@ describe('meetup arrangement (propose → confirm)', () => {
     expect(p2.deal.meetupConfirmed).toBe(false); // reschedule reopens
     expect(p2.deal.meetupName).toBe('B');
   });
+
+  it('rejects a proposed meetup time in the past (server-side guard)', () => {
+    const ctx = makeCtx();
+    const past = applyAction(armed(), { type: 'PROPOSE_MEETUP', actor: 'buyer', name: 'X', lat: 1, lng: 2, custom: false, time: ctx.now - 60_000 }, ctx);
+    expect(past.ok).toBe(false);
+    const future = applyAction(armed(), { type: 'PROPOSE_MEETUP', actor: 'buyer', name: 'X', lat: 1, lng: 2, custom: false, time: ctx.now + 60 * 60_000 }, ctx);
+    expect(future.ok).toBe(true);
+  });
 });
 
 describe('mutual no-show (neither showed by the agreed time)', () => {
@@ -196,9 +204,22 @@ describe('cancel / dispute split', () => {
     expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(0);
   });
 
-  it('buyer backing out AFTER heading out forfeits their deposit to the seller', () => {
+  it('backing out when the other side never headed out is a no-fault full refund', () => {
     const ctx = makeCtx();
+    // buyer headed out, seller ghosted (never headed out) — buyer cancels
     const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'buyer' }]).deal;
+    const r = applyAction(enRoute, { type: 'CANCEL', actor: 'buyer' }, ctx);
+    expect(r.ok && r.deal.state).toBe('REFUNDED');
+    if (!r.ok) return;
+    expect(r.deal.faultParty).toBeNull(); // no forfeit — the seller never committed to travel
+    expect(balanced(r.ledger)).toBe(true);
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 5_00); // buyer gets everything back
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(0);
+  });
+
+  it('buyer backing out after BOTH headed out forfeits their deposit to the seller', () => {
+    const ctx = makeCtx();
+    const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'buyer' }, { type: 'HEAD_OUT', actor: 'seller' }]).deal;
     const r = applyAction(enRoute, { type: 'CANCEL', actor: 'buyer' }, ctx);
     expect(r.ok && r.deal.state).toBe('EXPIRED_NO_SHOW');
     if (!r.ok) return;
@@ -209,9 +230,9 @@ describe('cancel / dispute split', () => {
     expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(4_00); // $4 of the forfeited deposit to the stood-up seller
   });
 
-  it('seller backing out AFTER heading out gets their card deposit captured for the buyer', () => {
+  it('seller backing out after BOTH headed out gets their card deposit captured for the buyer', () => {
     const ctx = makeCtx();
-    const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'seller' }]).deal;
+    const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'seller' }, { type: 'HEAD_OUT', actor: 'buyer' }]).deal;
     const r = applyAction(enRoute, { type: 'CANCEL', actor: 'seller' }, ctx);
     expect(r.ok && r.deal.state).toBe('EXPIRED_NO_SHOW');
     if (!r.ok) return;
