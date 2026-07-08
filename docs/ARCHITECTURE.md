@@ -51,13 +51,13 @@ The complete rules — tiers, deposits, every outcome — live in [`deal-rules.m
 
 | Outcome | Escrow → | Seller card hold |
 |---|---|---|
-| `RELEASED` (confirm / auto-release / dispute-release) | seller: price − seller fee · buyer: $5 deposit − buyer fee · platform: total fee | released |
-| `REFUNDED` (cancel before head-out / dispute-refund) | buyer: price + $5 deposit, in full — no fees | released |
-| `EXPIRED_NO_SHOW`, buyer at fault | buyer: price · seller: buyer's $5 deposit | released |
-| `EXPIRED_NO_SHOW`, seller at fault | buyer: price + $5 deposit | **captured**, $5 routed to buyer |
+| `RELEASED` (confirm / auto-release / dispute-release) | seller: price − seller fee · buyer: deposit − buyer fee · platform: total fee | released |
+| `REFUNDED` (cancel before head-out / dispute-refund) | buyer: price + deposit, in full — no fees | released |
+| `EXPIRED_NO_SHOW`, buyer at fault | buyer: price · seller: 80% of buyer's deposit · platform: 20% recovery fee | released |
+| `EXPIRED_NO_SHOW`, seller at fault | buyer: price + deposit + 80% of seller's deposit · platform: 20% recovery fee | **captured**, routed to buyer minus recovery fee |
 | Dispute **split** (no fault) | price 50/50 (odd cent to seller) · buyer deposit back whole — no fees | released |
 
-Dispute endings never capture the seller's deposit. If a capture fails on a real rail (empty/prepaid card), the company absorbs the payout via `platform:penalty` and the seller takes a −50 trust hit (`payments.ts` → `absorbFailedCollection`).
+The "80% of deposit" to the stood-up party is **capped at $15** (deals ≥ ~$375); MeetMe keeps the 20% recovery fee plus anything above the cap. Dispute endings never capture the seller's deposit. If a capture fails on a real rail (empty/prepaid card), the company absorbs the payout via `platform:penalty` and the seller takes a −50 trust hit (`payments.ts` → `absorbFailedCollection`).
 
 ## packages/core
 
@@ -65,7 +65,7 @@ Dispute endings never capture the seller's deposit. If a capture fails on a real
 |---|---|
 | `states.ts` | `DealState` union, terminal set, `ALLOWED_TRANSITIONS` graph |
 | `machine.ts` | `createDeal` + `applyAction` — the one guarded, atomic transition function; all ledger builders |
-| `money.ts` | fee tiers, `splitFee` ($4 buyer cap), $5 deposit, $5 min deal, $500 phone-tier cap, `requiresKyc` |
+| `money.ts` | fee tiers, `splitFee` (buyer capped at deposit − $1), `depositForAmount` (5%, $5–$25), `recoveryFeeForDeposit` (20%, comp capped at $15), $5 min deal, $500 phone-tier cap, `requiresKyc` |
 | `ledger.ts` | account refs, balanced-entry helpers, `escrowHeld` (derived from state) |
 | `geo.ts` | haversine distance, 60 m co-location radius, midpoint |
 | `types.ts` | `Deal`, `Action`, `SideEffect`, `LedgerEntry`, `Ctx` (injected time/ids/codes — the machine is deterministic) |

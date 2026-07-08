@@ -7,13 +7,13 @@ A P2P **escrow + safe-meetup** trust layer for in-person exchanges between stran
 **The deal loop** — a 4-step flow on top of a server-side state machine:
 
 1. **Agree** — either party creates a deal (or invites the other by phone); the seller accepts the terms.
-2. **Fund** — the buyer escrows the price + a $5 deposit, which arms the deal.
+2. **Fund** — the buyer escrows the price + a show-up deposit, which arms the deal.
 3. **Meet** — both head out, tracked live; a geofence detects when the phones come together.
 4. **Release** — the buyer reveals a one-time code, the seller enters it, the buyer confirms, and escrow pays out.
 
 **Money model** (full rules in [`docs/deal-rules.md`](docs/deal-rules.md)):
 
-- **Flat $5 show-up deposit per side**, every deal size. The buyer's rides along in escrow; the seller's is a card hold placed when they head out. A forfeited deposit goes to the stood-up party — never to the platform.
+- **Show-up deposit per side — 5% of the deal, floored at $5 and capped at $25.** It scales so the no-show stake stays meaningful on bigger deals. The buyer's rides along in escrow; the seller's is a card hold placed when they head out. A forfeited deposit goes to the stood-up party (they keep 80%; MeetMe keeps a 20% recovery fee), but the stood-up party's compensation is **capped at $15** — MeetMe keeps anything above that, so the most anyone nets off a forfeit is $15.
 - **One total fee per deal, charged only on completion**, tiered by price:
 
   | Price | Total fee |
@@ -26,11 +26,11 @@ A P2P **escrow + safe-meetup** trust layer for in-person exchanges between stran
   | ≤ $500 | $15 |
   | > $500 | 5% of price, capped at $50 |
 
-  Split between the sides: the buyer pays half, **capped at $4** (so a completing buyer always gets at least $1 of their deposit back); the seller pays the rest.
+  Split between the sides: the buyer pays half, **capped at deposit − $1** (so a completing buyer always gets at least $1 of their deposit back); the seller pays the rest. Since the deposit scales with the deal, the split stays ~50/50 at any size.
 - **Minimum deal $5.** Deals over **$500** require the creator to be ID-verified (KYC step is mocked for now).
-- Back out **before** anyone heads out: free, full refund. **After** heading out: you forfeit your $5 deposit to the other party. No-shows are detected automatically by a background worker.
+- Back out **before** anyone heads out: free, full refund. **After** heading out: you forfeit your deposit to the other party (they keep 80% up to a $15 cap; MeetMe keeps the 20% recovery fee plus anything above the cap). No-shows are detected automatically by a background worker.
 
-**Seller card-on-file** — sellers never escrow money. A card ($0 validation) is required to accept a deal; a $5 authorization hold is placed when the seller heads out, captured only if they no-show or back out, released untouched on completion. (Stubbed on FakeRail; the real rail is Stripe SetupIntent + manual-capture PaymentIntent.)
+**Seller card-on-file** — sellers never escrow money. A card ($0 validation) is required to accept a deal; a deposit-sized authorization hold is placed when the seller heads out, captured only if they no-show or back out, released untouched on completion. (Stubbed on FakeRail; the real rail is Stripe SetupIntent + manual-capture PaymentIntent.)
 
 **Safety features:**
 

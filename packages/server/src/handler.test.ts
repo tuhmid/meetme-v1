@@ -44,8 +44,8 @@ describe('M1 handler — happy path persists atomically and conserves money', ()
 
     expect(balanced(repo.ledger)).toBe(true);
     expect(balanceOf(repo.ledger, escrowAcct(dealId))).toBe(0); // escrow drained
-    expect(balanceOf(repo.ledger, bankAcct(seller.id))).toBe(300_00 - 8_00); // seller +$292 ($8 fee share)
-    expect(balanceOf(repo.ledger, bankAcct(buyer.id))).toBe(-(300_00 + 4_00)); // funded $305, $1 deposit back
+    expect(balanceOf(repo.ledger, bankAcct(seller.id))).toBe(300_00 - 6_00); // seller +$294 ($6 fee share)
+    expect(balanceOf(repo.ledger, bankAcct(buyer.id))).toBe(-(300_00 + 6_00)); // funded $315, $9 of the $15 deposit back
     expect(balanceOf(repo.ledger, PLATFORM_FEES)).toBe(12_00); // $12 total fee on a $300 deal
     expect(repo.ledger.reduce((s, e) => s + e.amountCents, 0)).toBe(0); // whole system nets 0
 
@@ -58,13 +58,13 @@ describe('M1 handler — happy path persists atomically and conserves money', ()
 });
 
 describe('worked example through the server ($150 deal)', () => {
-  it('funds $155, returns $1 of the deposit, pays the seller $144, platform keeps $10', async () => {
+  it('funds $157.50, returns $2.50 of the deposit, pays the seller $145, platform keeps $10', async () => {
     const { repo, ctx, buyer, seller, dealId } = await setup(150_00);
     const user = (id: string, action: Action) => handleAction(repo, { dealId, action, callerUserId: id, channel: 'user' }, ctx);
 
     ok(await user(seller.id, { type: 'ACCEPT_TERMS' }));
     ok(await user(buyer.id, { type: 'FUND' }));
-    expect(balanceOf(repo.ledger, escrowAcct(dealId))).toBe(155_00); // price + $5 deposit, no fee leg
+    expect(balanceOf(repo.ledger, escrowAcct(dealId))).toBe(157_50); // price + $7.50 deposit (5% of $150), no fee leg
 
     ok(await user(buyer.id, { type: 'HEAD_OUT', actor: 'buyer' }));
     ok(await user(buyer.id, { type: 'ARRIVE', party: 'buyer' }));
@@ -73,9 +73,9 @@ describe('worked example through the server ($150 deal)', () => {
     ok(await user(seller.id, { type: 'ENTER_CODE', code: revealed.secret!.releaseCode }));
     ok(await user(buyer.id, { type: 'CONFIRM_RECEIVED' }));
 
-    // $10 total fee → buyer $4 (capped) / seller $6
-    expect(balanceOf(repo.ledger, bankAcct(seller.id))).toBe(144_00);
-    expect(balanceOf(repo.ledger, bankAcct(buyer.id))).toBe(-(150_00 + 4_00)); // out $155, $1 back
+    // $10 total fee → buyer $5 / seller $5 (the $7.50 deposit covers the buyer's fair half)
+    expect(balanceOf(repo.ledger, bankAcct(seller.id))).toBe(145_00);
+    expect(balanceOf(repo.ledger, bankAcct(buyer.id))).toBe(-(150_00 + 5_00)); // out $157.50, $2.50 back
     expect(balanceOf(repo.ledger, PLATFORM_FEES)).toBe(10_00);
     expect(balanceOf(repo.ledger, escrowAcct(dealId))).toBe(0);
     expect(repo.ledger.reduce((s, e) => s + e.amountCents, 0)).toBe(0); // zero-sum across the deal

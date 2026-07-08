@@ -302,12 +302,12 @@ function useAppState() {
 
   const deleteDraft = (id: string) => run(async () => { await api.deleteDeal(bearer(), id); await loadHome(); });
 
-  // back out of a deal — free before heading out, forfeits your $5 deposit after
+  // back out of a deal — free before heading out, forfeits your deposit after
   const cancelDeal = () => {
     const enRoute = deal!.state === 'EN_ROUTE';
     Alert.alert(
       enRoute ? 'Back out?' : 'Cancel deal?',
-      enRoute ? 'You already headed out — backing out now forfeits your $5 deposit to the other person.' : 'You can back out for a full refund before anyone heads out.',
+      enRoute ? `You already headed out — backing out now forfeits your ${formatMoney(deal!.commitmentCents)} deposit to the other person.` : 'You can back out for a full refund before anyone heads out.',
       [
         { text: 'Keep deal', style: 'cancel' },
         { text: enRoute ? 'Back out' : 'Cancel deal', style: 'destructive', onPress: () => act({ type: 'CANCEL', actor: myRole(deal!) }) },

@@ -10,19 +10,34 @@ export type Cents = number; // always an integer number of cents
 export const usd = (c: Cents): string => (c % 100 === 0 ? `$${c / 100}` : `$${(c / 100).toFixed(2)}`);
 
 /**
- * Flat, refundable show-up deposit — $5 per side, every deal size.
- * The buyer's rides along in escrow with the price; the seller's is a card hold
- * placed at head-out. Forfeited to the stood-up party on a no-show, never to us.
+ * Refundable show-up deposit — 5% of the deal, floored at $5 and capped at $25.
+ * It scales with the deal so (a) the no-show stake is meaningful on bigger deals and
+ * (b) it can absorb the buyer's fair (~half) fee share while always returning ≥$1 on
+ * completion. Held per side: the buyer's rides in escrow with the price; the seller's
+ * is a card hold. Forfeited (minus a $1 recovery fee) to the stood-up party on a no-show.
  */
-export const DEPOSIT_CENTS: Cents = 5_00;
+export const MIN_DEPOSIT_CENTS: Cents = 5_00;
+export const MAX_DEPOSIT_CENTS: Cents = 25_00;
+export const DEPOSIT_RATE = 0.05; // 5% of the deal
+export function depositForAmount(amountCents: Cents): Cents {
+  return Math.min(MAX_DEPOSIT_CENTS, Math.max(MIN_DEPOSIT_CENTS, Math.round(amountCents * DEPOSIT_RATE)));
+}
 
 /**
- * On a no-show, the flake's $5 deposit compensates the stood-up party — but MeetMe
- * keeps $1 of it as a recovery fee (a forfeited deal earns no platform fee yet still
- * costs processing, so this keeps us from running underwater on flakes). The stood-up
- * party gets the remaining $4. Never applied when NEITHER party shows.
+ * On a no-show, the flake's deposit compensates the stood-up party — but MeetMe keeps a
+ * recovery fee (a forfeited deal earns no platform fee yet still costs processing). The
+ * fee is 20% of the forfeited deposit, so the stood-up party keeps 80% — UNLESS that
+ * would exceed the compensation cap, in which case their comp is held at the cap and
+ * MeetMe keeps the rest. The cap only bites on big deals (deposit > $18.75, i.e. deal >
+ * ~$375); below it the plain 20% applies. (20% of the $5 min deposit is $1 — the original
+ * flat fee.) Never applied when NEITHER party shows.
  */
-export const RECOVERY_FEE_CENTS: Cents = 1_00;
+export const RECOVERY_FEE_RATE = 0.20;
+export const MAX_COMPENSATION_CENTS: Cents = 15_00; // the stood-up party never nets more than this off a forfeit
+export function recoveryFeeForDeposit(depositCents: Cents): Cents {
+  const comp = Math.min(depositCents - Math.round(depositCents * RECOVERY_FEE_RATE), MAX_COMPENSATION_CENTS);
+  return depositCents - comp;
+}
 
 /**
  * TOTAL platform fee for a completed deal (both sides combined — split with
@@ -40,12 +55,13 @@ export function computeTotalFeeCents(amountCents: Cents): Cents {
 }
 
 /**
- * Split the total fee between the sides. The buyer's share is capped at $4 so
- * completing a deal always returns at least $1 of their $5 deposit — showing up
- * and finishing must never cost the whole deposit. Odd cent goes to the seller.
+ * Split the total fee between the sides. Each pays their fair (~half) share, but the
+ * buyer's is capped at `deposit − $1` so completing a deal always returns at least $1
+ * of their deposit — showing up and finishing must never cost the whole deposit. Because
+ * the deposit scales with the deal, the split stays ~50/50 at any size. Odd cent → seller.
  */
-export function splitFee(totalFeeCents: Cents): { buyerFeeCents: Cents; sellerFeeCents: Cents } {
-  const buyerFeeCents = Math.min(Math.floor(totalFeeCents / 2), 4_00);
+export function splitFee(totalFeeCents: Cents, depositCents: Cents): { buyerFeeCents: Cents; sellerFeeCents: Cents } {
+  const buyerFeeCents = Math.min(Math.floor(totalFeeCents / 2), depositCents - 1_00);
   return { buyerFeeCents, sellerFeeCents: totalFeeCents - buyerFeeCents };
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEPOSIT_CENTS, computeTotalFeeCents, splitFee, usd } from './money';
+import { MAX_COMPENSATION_CENTS, MAX_DEPOSIT_CENTS, MIN_DEPOSIT_CENTS, computeTotalFeeCents, depositForAmount, recoveryFeeForDeposit, splitFee, usd } from './money';
 
 describe('total fee tiers (whole deal, cents)', () => {
   it('matches the agreed schedule at the boundaries', () => {
@@ -25,25 +25,47 @@ describe('total fee tiers (whole deal, cents)', () => {
   });
 });
 
-describe('fee split (buyer capped at $4)', () => {
-  it('splits 50/50 below the cap, odd cent to the seller', () => {
-    expect(splitFee(5_00)).toEqual({ buyerFeeCents: 2_50, sellerFeeCents: 2_50 });
-    expect(splitFee(7_00)).toEqual({ buyerFeeCents: 3_50, sellerFeeCents: 3_50 });
-    expect(splitFee(5_05)).toEqual({ buyerFeeCents: 2_52, sellerFeeCents: 2_53 });
-  });
-
-  it('caps the buyer at $4 so completion always returns ≥ $1 of the deposit', () => {
-    expect(splitFee(9_00)).toEqual({ buyerFeeCents: 4_00, sellerFeeCents: 5_00 });
-    expect(splitFee(10_00)).toEqual({ buyerFeeCents: 4_00, sellerFeeCents: 6_00 });
-    expect(splitFee(12_00)).toEqual({ buyerFeeCents: 4_00, sellerFeeCents: 8_00 });
-    expect(splitFee(50_00)).toEqual({ buyerFeeCents: 4_00, sellerFeeCents: 46_00 });
-    expect(DEPOSIT_CENTS - splitFee(50_00).buyerFeeCents).toBeGreaterThanOrEqual(1_00);
+describe('deposit (5% of the deal, floored $5, capped $25)', () => {
+  it('floors at $5, scales at 5%, caps at $25', () => {
+    expect(depositForAmount(50_00)).toBe(5_00);    // 5% = $2.50 -> floor $5
+    expect(depositForAmount(100_00)).toBe(5_00);   // 5% = $5
+    expect(depositForAmount(120_00)).toBe(6_00);
+    expect(depositForAmount(350_00)).toBe(17_50);
+    expect(depositForAmount(500_00)).toBe(25_00);
+    expect(depositForAmount(1000_00)).toBe(25_00); // capped
+    expect(MIN_DEPOSIT_CENTS).toBe(5_00);
+    expect(MAX_DEPOSIT_CENTS).toBe(25_00);
   });
 });
 
-describe('deposit', () => {
-  it('is a flat $5 per side at every deal size', () => {
-    expect(DEPOSIT_CENTS).toBe(5_00);
+describe('fee split (buyer capped at deposit − $1, so ~50/50 as the deposit scales)', () => {
+  it('splits ~50/50 when the deposit covers it, odd cent to the seller', () => {
+    expect(splitFee(15_00, 17_50)).toEqual({ buyerFeeCents: 7_50, sellerFeeCents: 7_50 }); // $350 deal
+    expect(splitFee(5_05, 25_00)).toEqual({ buyerFeeCents: 2_52, sellerFeeCents: 2_53 });  // odd cent -> seller
+  });
+
+  it('caps the buyer at deposit − $1 so completion always returns ≥ $1', () => {
+    // a $5 deposit caps the buyer at $4 (the original small-deal behavior)
+    expect(splitFee(9_00, 5_00)).toEqual({ buyerFeeCents: 4_00, sellerFeeCents: 5_00 });
+    expect(splitFee(50_00, 5_00)).toEqual({ buyerFeeCents: 4_00, sellerFeeCents: 46_00 });
+    // a $1000 deal ($50 fee, $25 deposit): nearly 50/50, buyer still gets ≥$1 back
+    const s = splitFee(50_00, 25_00);
+    expect(s).toEqual({ buyerFeeCents: 24_00, sellerFeeCents: 26_00 });
+    expect(25_00 - s.buyerFeeCents).toBeGreaterThanOrEqual(1_00);
+  });
+});
+
+describe('recovery fee (20% of the forfeited deposit, comp capped at $15)', () => {
+  it('is 20% of the deposit while comp stays under the cap', () => {
+    expect(recoveryFeeForDeposit(5_00)).toBe(1_00);    // 20% of the $5 min = the original flat $1
+    expect(recoveryFeeForDeposit(15_00)).toBe(3_00);   // $300 deal → $12 comp
+    expect(recoveryFeeForDeposit(17_50)).toBe(3_50);   // $350 deal → $14 comp (still under cap)
+  });
+
+  it('caps the stood-up party at $15, MeetMe keeps the rest', () => {
+    // $25 deposit (deal ≥ $500): 80% would be $20, but comp is held at $15 → MeetMe keeps $10
+    expect(recoveryFeeForDeposit(25_00)).toBe(10_00);
+    expect(25_00 - recoveryFeeForDeposit(25_00)).toBe(MAX_COMPENSATION_CENTS); // comp == $15
   });
 });
 

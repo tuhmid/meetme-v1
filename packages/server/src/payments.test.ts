@@ -44,10 +44,10 @@ describe('M2 payments — instant rail (RTP) happy path', () => {
     const tr = await repo.listTransfers(dealId);
     const fund = tr.find((t) => t.direction === 'fund_buyer')!;
     expect(fund.status).toBe('settled');
-    expect(fund.amountCents).toBe(300_00 + 5_00); // price + the $5 deposit pulled, no fee upfront
+    expect(fund.amountCents).toBe(300_00 + 15_00); // price + the $15 deposit pulled, no fee upfront
     const payout = tr.find((t) => t.direction === 'payout_seller')!;
-    expect(payout.amountCents).toBe(300_00 - 8_00); // price - the seller's $8 fee share
-    expect(tr.some((t) => t.direction === 'refund_buyer' && t.amountCents === 1_00)).toBe(true); // deposit back minus the buyer's $4 fee share
+    expect(payout.amountCents).toBe(300_00 - 6_00); // price - the seller's $6 fee share
+    expect(tr.some((t) => t.direction === 'refund_buyer' && t.amountCents === 9_00)).toBe(true); // deposit back minus the buyer's $6 fee share
   });
 });
 
@@ -64,7 +64,7 @@ describe('M2 seller commitment hold (card on file)', () => {
 
     const holdId = (await repo.getDeal(dealId))!.deal.sellerHoldId!;
     expect(holdId).toBeTruthy();
-    expect(rail.holds.get(holdId)).toMatchObject({ userId: seller.id, amountCents: 5_00, status: 'held' });
+    expect(rail.holds.get(holdId)).toMatchObject({ userId: seller.id, amountCents: 15_00, status: 'held' });
 
     ok(await exec(buyer.id, { type: 'ARRIVE', party: 'buyer' }));
     ok(await exec(seller.id, { type: 'ARRIVE', party: 'seller' }));
@@ -91,10 +91,10 @@ describe('M2 seller commitment hold (card on file)', () => {
 
     expect(rail.holds.get(holdId)!.status).toBe('captured');
     expect((await repo.getDeal(dealId))!.deal.sellerHoldId).toBeNull();
-    // the captured $5 goes OUT to the buyer (a forward payout), alongside their full escrow refund
+    // the captured $15 deposit goes OUT to the buyer (a forward payout), alongside their full escrow refund
     const transfers = await repo.listTransfers(dealId);
-    expect(transfers.some((t) => t.direction === 'refund_buyer' && t.amountCents === 300_00 + 5_00)).toBe(true); // escrow made whole
-    expect(transfers.some((t) => t.direction === 'payout_buyer' && t.amountCents === 4_00)).toBe(true); // + $4 of the seller's captured deposit
+    expect(transfers.some((t) => t.direction === 'refund_buyer' && t.amountCents === 300_00 + 15_00)).toBe(true); // escrow made whole
+    expect(transfers.some((t) => t.direction === 'payout_buyer' && t.amountCents === 12_00)).toBe(true); // + $12 of the seller's captured deposit
   });
 
   it('collects off the card even when the seller never headed out (no prior hold)', async () => {
@@ -251,7 +251,7 @@ describe('M2 scheduled meetup — commitment hold lifecycle', () => {
     const exec = (id: string, a: Action) => executeAction(repo, rail, { dealId, action: a, callerUserId: id, channel: 'user' }, ctx);
     ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
     ok(await exec(buyer.id, { type: 'FUND' }));
-    // scheduled meetup: the seller's $5 hold is placed at CONFIRM — before anyone heads out
+    // scheduled meetup: the seller's $15 hold is placed at CONFIRM — before anyone heads out
     ok(await exec(seller.id, { type: 'PROPOSE_MEETUP', actor: 'seller', name: 'Precinct', lat: 1, lng: 2, custom: false, time: ctx.now + 60 * 60_000 }));
     ok(await exec(buyer.id, { type: 'CONFIRM_MEETUP', actor: 'buyer' }));
     const holdId = (await repo.getDeal(dealId))!.deal.sellerHoldId!;
@@ -274,6 +274,6 @@ describe('M2 refund push', () => {
     ok(await exec(buyer.id, { type: 'CANCEL', actor: 'buyer' }));
     expect((await repo.getDeal(dealId))!.deal.state).toBe('REFUNDED');
     const refunds = (await repo.listTransfers(dealId)).filter((t) => t.direction === 'refund_buyer');
-    expect(refunds.some((t) => t.amountCents === 300_00 + 5_00)).toBe(true); // full refund to buyer
+    expect(refunds.some((t) => t.amountCents === 300_00 + 15_00)).toBe(true); // full refund to buyer
   });
 });

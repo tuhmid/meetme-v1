@@ -10,7 +10,7 @@
 // one DB transaction. Pure + deterministic (all time/ids/codes come from ctx).
 // ---------------------------------------------------------------------------
 
-import { DEPOSIT_CENTS, RECOVERY_FEE_CENTS, computeTotalFeeCents, splitFee, usd, type Cents } from './money';
+import { computeTotalFeeCents, depositForAmount, recoveryFeeForDeposit, splitFee, usd, type Cents } from './money';
 import { canTransition, type DealState } from './states';
 import {
   PLATFORM_FEES,
@@ -44,7 +44,7 @@ export function createDeal(input: {
     itemDescription: input.itemDescription,
     amountCents: input.amountCents,
     totalFeeCents: computeTotalFeeCents(input.amountCents),
-    commitmentCents: DEPOSIT_CENTS,
+    commitmentCents: depositForAmount(input.amountCents),
     state: 'DRAFT',
     releaseCodeHash: null,
     codeRevealed: false,
@@ -74,7 +74,7 @@ function releaseLedger(deal: Deal, ctx: Ctx): LedgerEntry[] {
   // completion is the ONLY place fees exist: seller's share netted from the
   // payout, buyer's share netted from their deposit (capped so ≥ $1 comes back)
   const h = escrowHeld(deal);
-  const { buyerFeeCents, sellerFeeCents } = splitFee(deal.totalFeeCents);
+  const { buyerFeeCents, sellerFeeCents } = splitFee(deal.totalFeeCents, deal.commitmentCents);
   const txn = ctx.newTxnId();
   return nonZero([
     entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'release'),
@@ -107,14 +107,15 @@ function splitLedger(deal: Deal, ctx: Ctx): LedgerEntry[] {
 }
 
 function noShowLedger(deal: Deal, noShow: Role, ctx: Ctx): LedgerEntry[] {
-  // The flake's $5 deposit compensates the stood-up party ($4), and MeetMe keeps a
-  // $1 recovery fee (a forfeited deal earns no platform fee). No item fee is charged.
+  // The flake's deposit compensates the stood-up party (80%); MeetMe keeps a 20%
+  // recovery fee (a forfeited deal earns no platform fee). No item fee is charged.
   const h = escrowHeld(deal);
-  const comp = deal.commitmentCents - RECOVERY_FEE_CENTS; // $4 to the stood-up party
+  const recovery = recoveryFeeForDeposit(deal.commitmentCents);
+  const comp = deal.commitmentCents - recovery; // 80% to the stood-up party
   const txn = ctx.newTxnId();
   if (noShow === 'seller') {
     // buyer fully refunded from escrow (price + their deposit); the seller's deposit
-    // is collected off their card — $4 routed to the buyer, $1 to platform fees. The
+    // is collected off their card — 80% routed to the buyer, 20% to platform fees. The
     // capture is its own zero-sum txn (that money was never in escrow).
     const capture = ctx.newTxnId();
     return nonZero([
@@ -122,16 +123,16 @@ function noShowLedger(deal: Deal, noShow: Role, ctx: Ctx): LedgerEntry[] {
       entry(txn, bankAcct(deal.buyerId), h.amount + h.buyerDeposit, deal.id, 'present_refund'),
       entry(capture, bankAcct(deal.sellerId), -deal.commitmentCents, deal.id, 'deposit_capture'),
       entry(capture, bankAcct(deal.buyerId), comp, deal.id, 'stood_up_compensation'),
-      entry(capture, PLATFORM_FEES, RECOVERY_FEE_CENTS, deal.id, 'no_show_recovery_fee'),
+      entry(capture, PLATFORM_FEES, recovery, deal.id, 'no_show_recovery_fee'),
     ]);
   }
-  // buyer no-show: the price returns; the buyer's escrowed deposit is split
-  // $4 to the stood-up seller, $1 to platform fees.
+  // buyer no-show: the price returns; the buyer's escrowed deposit is split 80% to the
+  // stood-up seller, 20% to platform fees.
   return nonZero([
     entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'no_show'),
     entry(txn, bankAcct(deal.buyerId), h.amount, deal.id, 'price_return'),
     entry(txn, bankAcct(deal.sellerId), comp, deal.id, 'stood_up_compensation'),
-    entry(txn, PLATFORM_FEES, RECOVERY_FEE_CENTS, deal.id, 'no_show_recovery_fee'),
+    entry(txn, PLATFORM_FEES, recovery, deal.id, 'no_show_recovery_fee'),
   ]);
 }
 
@@ -422,7 +423,8 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
         });
       }
       const present = otherRole(action.noShow);
-      const note = `${action.noShow} never arrived. ${present} fully refunded; ${usd(deal.commitmentCents - RECOVERY_FEE_CENTS)} of the no-show's ${usd(deal.commitmentCents)} deposit went to the ${present} (MeetMe kept a ${usd(RECOVERY_FEE_CENTS)} recovery fee).`;
+      const recovery = recoveryFeeForDeposit(deal.commitmentCents);
+      const note = `${action.noShow} never arrived. ${present} fully refunded; ${usd(deal.commitmentCents - recovery)} of the no-show's ${usd(deal.commitmentCents)} deposit went to the ${present} (MeetMe kept a ${usd(recovery)} recovery fee).`;
       return transition(deal, 'EXPIRED_NO_SHOW', ev(ctx, 'system', 'no_show', note), {
         ledger: noShowLedger(deal, action.noShow, ctx),
         effects: faultEffects(deal, action.noShow),

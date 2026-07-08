@@ -30,10 +30,22 @@ export const feeForAmount = (amountCents: number): number => {
   return Math.min(Math.round(amountCents * 0.05), 50_00);
 };
 
-// mirror of core splitFee: buyer's fee share is capped at $4 so completing a
-// deal always returns at least $1 of the $5 deposit
-export const buyerFeeCents = (totalFeeCents: number): number => Math.min(Math.floor(totalFeeCents / 2), 400);
-export const sellerFeeCents = (totalFeeCents: number): number => totalFeeCents - buyerFeeCents(totalFeeCents);
+// mirror of core depositForAmount: refundable show-up deposit — 5% of the deal,
+// floored at $5, capped at $25. Scales the no-show stake and covers the buyer's fee share.
+export const depositForAmount = (amountCents: number): number =>
+  Math.min(25_00, Math.max(5_00, Math.round(amountCents * 0.05)));
+
+// mirror of core splitFee: each side pays ~half, but the buyer's share is capped at
+// deposit − $1 so completing a deal always returns at least $1 of the deposit.
+export const buyerFeeCents = (totalFeeCents: number, depositCents: number): number => Math.min(Math.floor(totalFeeCents / 2), depositCents - 1_00);
+export const sellerFeeCents = (totalFeeCents: number, depositCents: number): number => totalFeeCents - buyerFeeCents(totalFeeCents, depositCents);
+
+// mirror of core recoveryFeeForDeposit: 20% of a forfeited deposit kept by MeetMe on a
+// no-show, but the stood-up party's compensation is capped at $15 (MeetMe keeps the rest).
+export const recoveryFeeForDeposit = (depositCents: number): number => {
+  const comp = Math.min(depositCents - Math.round(depositCents * 0.2), 15_00);
+  return depositCents - comp;
+};
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) UIManager.setLayoutAnimationEnabledExperimental(true);
 export const gentle = () => LayoutAnimation.configureNext(LayoutAnimation.create(220, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity));
 
@@ -127,7 +139,7 @@ export function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHin
     let title = 'Your move';
     let body = '';
     if (s === 'DRAFT') { title = 'Review and accept the terms'; body = 'Nothing is charged until the buyer funds the escrow.'; }
-    else if (s === 'AGREED') { title = 'Fund the escrow'; body = `${formatMoney(deal.amountCents)} item + $5 deposit. Complete the deal and ${formatMoney(deal.commitmentCents - buyerFeeCents(deal.totalFeeCents))} of it comes back — the rest is the fee, only ever kept on a completed deal.`; }
+    else if (s === 'AGREED') { title = 'Fund the escrow'; body = `${formatMoney(deal.amountCents)} item + ${formatMoney(deal.commitmentCents)} deposit. Complete the deal and ${formatMoney(deal.commitmentCents - buyerFeeCents(deal.totalFeeCents, deal.commitmentCents))} of it comes back — the rest is the fee, only ever kept on a completed deal.`; }
     else if (s === 'ARMED') {
       title = "Head out when you're ready";
       body = role === 'seller'
@@ -155,8 +167,8 @@ export function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHin
 export function outcomeFor(deal: Deal, role: Role, otherFirst: string): { tone: Tone; kicker: string; title: string; body: string } | null {
   const price = formatMoney(deal.amountCents);
   const deposit = formatMoney(deal.commitmentCents);
-  const buyerFee = buyerFeeCents(deal.totalFeeCents);
-  const sellerFee = sellerFeeCents(deal.totalFeeCents);
+  const buyerFee = buyerFeeCents(deal.totalFeeCents, deal.commitmentCents);
+  const sellerFee = sellerFeeCents(deal.totalFeeCents, deal.commitmentCents);
   switch (deal.state) {
     case 'RELEASED':
       return role === 'buyer'
@@ -173,11 +185,13 @@ export function outcomeFor(deal: Deal, role: Role, otherFirst: string): { tone: 
     case 'EXPIRED_NO_SHOW': {
       const iArrived = role === 'buyer' ? deal.buyerArrived : deal.sellerArrived;
       const theyArrived = role === 'buyer' ? deal.sellerArrived : deal.buyerArrived;
-      const comp = formatMoney(deal.commitmentCents - 100); // $4 to the stood-up party
+      const recovery = recoveryFeeForDeposit(deal.commitmentCents);
+      const comp = formatMoney(deal.commitmentCents - recovery); // 80% of the deposit to the stood-up party
+      const fee = formatMoney(recovery);
       const body = iArrived && !theyArrived
-        ? `${otherFirst} didn't show. ${comp} of their ${deposit} deposit was paid to you (MeetMe kept a $1 recovery fee), and anything you'd funded came back in full.`
+        ? `${otherFirst} didn't show. ${comp} of their ${deposit} deposit was paid to you (MeetMe kept a ${fee} recovery fee), and anything you'd funded came back in full.`
         : !iArrived && theyArrived
-          ? `You didn't make it, so ${comp} of your ${deposit} deposit went to ${otherFirst} (MeetMe kept a $1 recovery fee). Anything else you'd funded was returned.`
+          ? `You didn't make it, so ${comp} of your ${deposit} deposit went to ${otherFirst} (MeetMe kept a ${fee} recovery fee). Anything else you'd funded was returned.`
           : `Neither of you made it — everyone was refunded in full. No penalty, no fee.`;
       return { tone: 'warning', kicker: 'No-show', title: 'Deal expired', body };
     }

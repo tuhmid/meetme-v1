@@ -3,6 +3,13 @@
 Date: 2026-07-07
 Status: approved (brainstorm) → implementing
 
+> **Superseded (2026-07-08):** the deposit and recovery fee below later became
+> **scaled** — deposit = 5% of the deal ($5–$25), recovery fee = **20% of the
+> forfeited deposit** (was a flat $1 on a flat $5 deposit). The `$5`/`$4`/`$1`
+> figures in this doc are the original design; see [`deal-rules.md`](../../deal-rules.md)
+> for the current model. The mechanism (compensate the stood-up party, keep a
+> recovery fee, close the mutual-no-show gap) is unchanged.
+
 ## Problem
 
 MeetMe's no-show forfeit compensates a stood-up party from the flake's $5 deposit.

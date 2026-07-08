@@ -97,8 +97,8 @@ describe('worker: runWorkerOnce (driver)', () => {
     // present party (buyer) got refunded on the rail — full escrow refunded, plus the
     // seller's captured deposit paid FORWARD to the buyer (a payout, not a refund)
     const transfers = await repo.listTransfers(dealId);
-    expect(transfers.some((t) => t.direction === 'refund_buyer' && t.amountCents === 300_00 + 5_00)).toBe(true);
-    expect(transfers.some((t) => t.direction === 'payout_buyer' && t.amountCents === 4_00)).toBe(true); // $4 comp ($1 recovery fee kept)
+    expect(transfers.some((t) => t.direction === 'refund_buyer' && t.amountCents === 300_00 + 15_00)).toBe(true);
+    expect(transfers.some((t) => t.direction === 'payout_buyer' && t.amountCents === 12_00)).toBe(true); // $12 comp ($3 recovery fee kept)
     expect([...rail.holds.values()].some((h) => h.userId === seller.id && h.status === 'captured')).toBe(true);
     void buyer;
   });

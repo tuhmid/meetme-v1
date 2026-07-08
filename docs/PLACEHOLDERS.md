@@ -100,7 +100,7 @@ whenever we take a shortcut. (Also mirrored in project memory.)
 - ~~No ratings~~ — star ratings after a completed deal + a counterparty reputation
   line (trust score / deal count) on the deal screen (M9).
 - ~~Can't back out / cancel~~ — Cancel/back-out on the deal screen: **free full
-  refund before heading out; forfeit your $5 deposit after** (self-declared no-show).
+  refund before heading out; forfeit your deposit after** (self-declared no-show).
   See `docs/deal-rules.md`.
 - ~~Can't decline an invite~~ — Decline button on invite cards (invitee dismisses;
   inviter can rescind).

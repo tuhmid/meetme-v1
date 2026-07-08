@@ -9,7 +9,7 @@ import { useTheme } from '../../theme';
 import { Button, Callout, Card, DealHistoryRow, SectionLabel } from '../../ui';
 import { useApp } from '../AppContext';
 import { RoleBar, RolePick } from '../components';
-import { buyerFeeCents, centsFromInput, feeForAmount, formatMoney, formatPhone, inputStyle, sellerFeeCents } from '../dealLogic';
+import { buyerFeeCents, centsFromInput, depositForAmount, feeForAmount, formatMoney, formatPhone, inputStyle, sellerFeeCents } from '../dealLogic';
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -102,8 +102,10 @@ export default function HomeScreen() {
             <TextInput value={amountCents ? formatMoney(amountCents) : ''} onChangeText={(t) => setAmountCents(centsFromInput(t))} placeholder="$0.00" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" style={inputStyle(theme)} />
             {amountCents > 0 && (() => {
               // The fee is split — show only the CREATOR'S share (buyer unless they're inviting as the seller).
+              // The buyer's share scales with the deposit, so mirror the server's deposit for this price.
               const total = feeForAmount(amountCents);
-              const myFee = (!!session && inviteRole === 'seller') ? sellerFeeCents(total) : buyerFeeCents(total);
+              const deposit = depositForAmount(amountCents);
+              const myFee = (!!session && inviteRole === 'seller') ? sellerFeeCents(total, deposit) : buyerFeeCents(total, deposit);
               return (
                 <Animated.View entering={FadeIn.duration(200)} style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: -2, marginBottom: 12, paddingHorizontal: 2 }}>
                   <Text style={{ color: theme.colors.textDim, fontSize: 13 }}>Your MeetMe fee </Text>

@@ -52,9 +52,9 @@ describe('happy path + money conservation', () => {
     expect(balanced(ledger)).toBe(true); // every txn sums to 0 → total conserved
     expect(balanceOf(ledger, escrowAcct('d1'))).toBe(0); // escrow fully drained
 
-    // $300 deal: $12 total fee → buyer $4 (capped) / seller $8; deposit flat $5
-    expect(balanceOf(ledger, bankAcct('sam'))).toBe(300_00 - 8_00); // seller net +$292.00
-    expect(balanceOf(ledger, bankAcct('maya'))).toBe(-(300_00 + 4_00)); // funded $305, $1 of the deposit back
+    // $300 deal: $12 total fee → buyer $6 / seller $6 (deposit $15 covers the split); deposit 5% = $15
+    expect(balanceOf(ledger, bankAcct('sam'))).toBe(300_00 - 6_00); // seller net +$294.00
+    expect(balanceOf(ledger, bankAcct('maya'))).toBe(-(300_00 + 6_00)); // funded $315, $9 of the $15 deposit back
     expect(balanceOf(ledger, PLATFORM_FEES)).toBe(12_00); // the whole fee, both shares
 
     // whole-system net is zero
@@ -72,8 +72,8 @@ describe('happy path + money conservation', () => {
     const ctx = makeCtx();
     const { deal, ledger } = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]);
     expect(deal.state).toBe('ARMED');
-    expect(balanceOf(ledger, bankAcct('maya'))).toBe(-(300_00 + 5_00)); // price + $5 deposit, no fee leg
-    expect(balanceOf(ledger, escrowAcct('d1'))).toBe(300_00 + 5_00);
+    expect(balanceOf(ledger, bankAcct('maya'))).toBe(-(300_00 + 15_00)); // price + $15 deposit, no fee leg
+    expect(balanceOf(ledger, escrowAcct('d1'))).toBe(300_00 + 15_00);
     expect(balanceOf(ledger, bankAcct('sam'))).toBe(0); // seller pays nothing upfront
   });
 
@@ -97,12 +97,12 @@ describe('no-show: the deposit goes to the stood-up party', () => {
     expect(r.deal.state).toBe('EXPIRED_NO_SHOW');
     expect(r.deal.faultParty).toBe('seller');
     expect(balanced(r.ledger)).toBe(true);
-    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 5_00 + 4_00); // full refund + $4 of the seller's captured deposit
-    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(-5_00); // whole $5 collected off the seller's card
-    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(1_00); // $1 recovery fee
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 15_00 + 12_00); // full refund + $12 of the seller's captured deposit
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(-15_00); // whole $15 deposit collected off the seller's card
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(3_00); // 20% recovery fee on a $15 deposit
     expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0);
     expect(r.effects).toContainEqual({ type: 'trust_delta', userId: 'sam', delta: -6 });
-    expect(r.effects).toContainEqual({ type: 'capture_seller_commitment', toUserId: 'maya', amountCents: 5_00 });
+    expect(r.effects).toContainEqual({ type: 'capture_seller_commitment', toUserId: 'maya', amountCents: 15_00 });
   });
 
   it('buyer no-show: the buyer deposit pays the stood-up seller, the price returns', () => {
@@ -117,8 +117,8 @@ describe('no-show: the deposit goes to the stood-up party', () => {
     expect(r.deal.faultParty).toBe('buyer');
     expect(balanced(r.ledger)).toBe(true);
     expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00); // price back, NOT the deposit
-    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(4_00); // $4 of the buyer's deposit, to the seller
-    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(1_00); // $1 recovery fee
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(12_00); // $12 of the buyer's deposit, to the seller
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(3_00); // 20% recovery fee on a $15 deposit
     expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0);
     expect(r.effects).toContainEqual({ type: 'trust_delta', userId: 'maya', delta: -6 });
     expect(r.effects).toContainEqual({ type: 'release_seller_hold' }); // seller headed out; their hold is let go
@@ -153,7 +153,7 @@ describe('meetup arrangement (propose → confirm)', () => {
     expect(confirmed.ok).toBe(true);
     if (!confirmed.ok) return;
     expect(confirmed.deal.meetupTime).toBe(1_700_000_900_000);
-    expect(confirmed.effects).toContainEqual({ type: 'hold_seller_commitment', sellerId: 'sam', amountCents: 5_00 });
+    expect(confirmed.effects).toContainEqual({ type: 'hold_seller_commitment', sellerId: 'sam', amountCents: 15_00 });
   });
 
   it('rescheduling (a new proposal) re-opens confirmation', () => {
@@ -188,7 +188,7 @@ describe('mutual no-show (neither showed by the agreed time)', () => {
     expect(r.deal.state).toBe('EXPIRED_NO_SHOW');
     expect(r.deal.faultParty).toBeNull();
     expect(balanced(r.ledger)).toBe(true);
-    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 5_00); // buyer fully refunded
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 15_00); // buyer fully refunded
     expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(0); // no fee on a mutual flake
   });
 });
@@ -200,7 +200,7 @@ describe('cancel / dispute split', () => {
     const r = applyAction(armed, { type: 'CANCEL', actor: 'buyer' }, ctx);
     expect(r.ok && r.deal.state).toBe('REFUNDED');
     if (!r.ok) return;
-    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 5_00); // everything back
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 15_00); // everything back
     expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(0);
   });
 
@@ -213,7 +213,7 @@ describe('cancel / dispute split', () => {
     if (!r.ok) return;
     expect(r.deal.faultParty).toBeNull(); // no forfeit — the seller never committed to travel
     expect(balanced(r.ledger)).toBe(true);
-    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 5_00); // buyer gets everything back
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 15_00); // buyer gets everything back
     expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(0);
   });
 
@@ -225,9 +225,9 @@ describe('cancel / dispute split', () => {
     if (!r.ok) return;
     expect(r.deal.faultParty).toBe('buyer');
     expect(balanced(r.ledger)).toBe(true);
-    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(1_00); // $1 recovery fee
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(3_00); // 20% recovery fee on a $15 deposit
     expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00); // price back, NOT the deposit
-    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(4_00); // $4 of the forfeited deposit to the stood-up seller
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(12_00); // $12 of the forfeited deposit to the stood-up seller
   });
 
   it('seller backing out after BOTH headed out gets their card deposit captured for the buyer', () => {
@@ -238,10 +238,10 @@ describe('cancel / dispute split', () => {
     if (!r.ok) return;
     expect(r.deal.faultParty).toBe('seller');
     expect(balanced(r.ledger)).toBe(true);
-    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 5_00 + 4_00); // made whole + $4 compensation
-    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(-5_00);
-    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(1_00); // $1 recovery fee
-    expect(r.effects).toContainEqual({ type: 'capture_seller_commitment', toUserId: 'maya', amountCents: 5_00 });
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 15_00 + 12_00); // made whole + $12 compensation
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(-15_00);
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(3_00); // 20% recovery fee on a $15 deposit
+    expect(r.effects).toContainEqual({ type: 'capture_seller_commitment', toUserId: 'maya', amountCents: 15_00 });
   });
 
   it('dispute split halves the price, returns the buyer deposit, releases the hold, no fee', () => {
@@ -254,7 +254,7 @@ describe('cancel / dispute split', () => {
     expect(r.ok && r.deal.state).toBe('DISPUTE_RESOLVED');
     if (!r.ok) return;
     expect(balanced(r.ledger)).toBe(true);
-    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(150_00 + 5_00); // half price + the whole deposit
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(150_00 + 15_00); // half price + the whole deposit
     expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(150_00); // half price (their deposit was never in escrow)
     expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(0);
     expect(r.effects).toContainEqual({ type: 'release_seller_hold' }); // disputes never capture the hold
@@ -406,8 +406,8 @@ describe('HEAD_OUT presence + the seller deposit hold', () => {
     if (!r2.ok) return;
     expect(r2.deal.state).toBe('EN_ROUTE'); // no state change on the second
     expect(r2.deal.sellerHeadedOut).toBe(true);
-    // the seller's head-out places the $5 deposit hold on their card
-    expect(r2.effects).toContainEqual({ type: 'hold_seller_commitment', sellerId: 'sam', amountCents: 5_00 });
+    // the seller's head-out places the $15 deposit hold on their card ($300 deal, 5%)
+    expect(r2.effects).toContainEqual({ type: 'hold_seller_commitment', sellerId: 'sam', amountCents: 15_00 });
 
     const again = applyAction(r2.deal, { type: 'HEAD_OUT', actor: 'seller' }, ctx);
     expect(again.ok && again.effects).toEqual([]); // never double-holds
@@ -419,7 +419,7 @@ describe('HEAD_OUT presence + the seller deposit hold', () => {
     const r = applyAction(armed, { type: 'HEAD_OUT', actor: 'seller' }, ctx);
     expect(r.ok && r.deal.state).toBe('EN_ROUTE');
     if (!r.ok) return;
-    expect(r.effects).toContainEqual({ type: 'hold_seller_commitment', sellerId: 'sam', amountCents: 5_00 });
+    expect(r.effects).toContainEqual({ type: 'hold_seller_commitment', sellerId: 'sam', amountCents: 15_00 });
   });
 });
 
@@ -446,17 +446,17 @@ describe('worked examples (whole-deal money)', () => {
   const deal = (amountCents: number): Deal =>
     createDeal({ id: 'd1', buyerId: 'maya', sellerId: 'sam', useCase: 'marketplace', itemDescription: 'thing', amountCents });
 
-  it('$150 deal: fund $155, buyer gets $1 back, seller nets $144, platform $10', () => {
+  it('$150 deal: fund $157.50, buyer gets $2.50 back, seller nets $145, platform $10', () => {
     const ctx = makeCtx();
     const { deal: d, ledger } = drive(deal(150_00), ctx, HAPPY);
     expect(d.state).toBe('RELEASED');
 
     const fund = ledger.find((e) => e.memo === 'fund' && e.account === escrowAcct('d1'));
-    expect(fund?.amountCents).toBe(155_00); // price + $5 deposit, no fee leg
+    expect(fund?.amountCents).toBe(157_50); // price + $7.50 deposit (5% of $150), no fee leg
 
-    // total fee $10 → buyer $4 (capped) / seller $6
-    expect(ledger.find((e) => e.memo === 'buyer_deposit_return')?.amountCents).toBe(1_00);
-    expect(ledger.find((e) => e.memo === 'seller_payout')?.amountCents).toBe(144_00);
+    // total fee $10 → buyer $5 / seller $5 (the $7.50 deposit covers the buyer's fair half)
+    expect(ledger.find((e) => e.memo === 'buyer_deposit_return')?.amountCents).toBe(2_50);
+    expect(ledger.find((e) => e.memo === 'seller_payout')?.amountCents).toBe(145_00);
     expect(balanceOf(ledger, PLATFORM_FEES)).toBe(10_00);
     expect(ledger.reduce((s, e) => s + e.amountCents, 0)).toBe(0); // zero-sum across the deal
     expect(balanced(ledger)).toBe(true);
@@ -476,7 +476,7 @@ describe('worked examples (whole-deal money)', () => {
     expect(ledger.reduce((s, e) => s + e.amountCents, 0)).toBe(0);
   });
 
-  it('$150 seller no-show: buyer made whole ($155 refund + $4 comp), platform keeps a $1 recovery fee', () => {
+  it('$150 seller no-show: buyer made whole ($157.50 refund + $6 comp), platform keeps a $1.50 recovery fee', () => {
     const ctx = makeCtx();
     const enRoute = drive(deal(150_00), ctx, [
       { type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'buyer' }, { type: 'ARRIVE', party: 'buyer' },
@@ -485,11 +485,11 @@ describe('worked examples (whole-deal money)', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
 
-    expect(r.ledger.find((e) => e.memo === 'present_refund')?.amountCents).toBe(155_00);
-    expect(r.ledger.find((e) => e.memo === 'stood_up_compensation')?.amountCents).toBe(4_00);
-    expect(r.ledger.find((e) => e.memo === 'no_show_recovery_fee')?.amountCents).toBe(1_00);
-    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(159_00); // $155 back + $4 of the seller's $5
-    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(1_00); // $1 recovery fee
+    expect(r.ledger.find((e) => e.memo === 'present_refund')?.amountCents).toBe(157_50);
+    expect(r.ledger.find((e) => e.memo === 'stood_up_compensation')?.amountCents).toBe(6_00);
+    expect(r.ledger.find((e) => e.memo === 'no_show_recovery_fee')?.amountCents).toBe(1_50);
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(163_50); // $157.50 back + $6 of the seller's $7.50 deposit
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(1_50); // 20% recovery fee on a $7.50 deposit
     expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0);
     expect(balanced(r.ledger)).toBe(true);
   });

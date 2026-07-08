@@ -17,28 +17,42 @@ cents; every ledger transaction sums to zero (nothing created/destroyed).
   | ≤ $500 | $15 |
   | > $500 | 5% of price, capped at $50 |
 
-  The total is **split between the sides**: the buyer pays half, **capped at $4**
-  (odd cent to the seller); the seller pays the rest. The cap guarantees a buyer
-  who completes a deal always gets **at least $1 of their $5 deposit back** —
-  finishing must never cost the whole deposit.
-- **Deposit** — a **flat $5 per side, every deal size**, skin-in-the-game to
-  guarantee you show up, and it's asymmetric by design:
-  - **Buyer**: escrowed with the funding (buyer upfront = **price + $5**, nothing else).
+  The total is **split between the sides**: the buyer pays half, **capped at
+  deposit − $1** (odd cent to the seller); the seller pays the rest. The cap
+  guarantees a buyer who completes a deal always gets **at least $1 of their
+  deposit back** — finishing must never cost the whole deposit. Because the
+  deposit scales with the deal (below), the split stays ~50/50 at any size.
+- **Deposit** — a refundable show-up stake, **5% of the deal, floored at $5 and
+  capped at $25** (per side). It scales so the no-show stake stays meaningful on
+  bigger deals and can absorb the buyer's fair (~half) fee share while still
+  returning ≥ $1 on completion. Held asymmetrically by design:
+  - **Buyer**: escrowed with the funding (buyer upfront = **price + deposit**, nothing else).
   - **Seller**: never escrowed. The seller keeps a **card on file** ($0 validation,
-    required to accept terms); a **$5 authorization hold** is placed when they head
-    out and **captured only if they no-show / back out** after that.
-  - Either way a forfeited deposit is **routed to the stood-up party**, not the company.
+    required to accept terms); a **deposit-sized authorization hold** is placed when
+    they head out and **captured only if they no-show / back out** after that.
+  - On a forfeit the deposit goes to the stood-up party **minus a recovery fee**
+    (below) — the party who showed up always keeps the large majority.
+- **Recovery fee** — a forfeited deal earns no platform fee yet still costs
+  processing and support, so MeetMe keeps **20% of the forfeited deposit** on a
+  no-show / back-out; the stood-up party keeps the other **80%** — but their
+  compensation is **capped at $15**, and MeetMe keeps anything above that. The cap
+  only bites on big deals (deposit > $18.75, i.e. deal > ~$375); at the max ($25
+  deposit) the stood-up party nets **$15** and MeetMe keeps **$10**. Never charged
+  when *neither* party shows — a mutual flake is a full no-fault refund.
 - **Minimum deal: $5** — below that the fee + deposit dwarf the item and the loop stops making sense. (No max yet; the phone tier caps at $500 without ID verification. A licensed partner will impose a hard cap later.)
 
-**Worked example — $150 deal.** Buyer funds **$155** (price + $5 deposit). Total
-fee $10 → buyer $4 / seller $6. On completion: seller is paid **$144**
-($150 − $6), buyer gets **$1** of the deposit back ($5 − $4), platform keeps
-**$10**. Every transaction sums to zero.
+**Worked example — $150 deal.** Deposit is 5% = **$7.50**; the buyer funds
+**$157.50** (price + deposit). Total fee $10 → buyer $5 / seller $5. On
+completion: seller is paid **$145** ($150 − $5), the buyer gets **$2.50** of the
+deposit back ($7.50 − $5), platform keeps **$10**. If the seller no-shows
+instead: the buyer is fully refunded and gets **$6** of the seller's $7.50
+deposit (80%); MeetMe keeps the **$1.50** recovery fee (20%). Every transaction
+sums to zero.
 
 ## Happy path
 DRAFT → AGREED (seller accepts — card on file required) → ARMED (buyer funds
-price + $5 deposit; **the FUND arms the deal directly — there is no seller stake
-turn**) → EN_ROUTE (head out; the seller's head-out places their $5 card hold) →
+price + deposit; **the FUND arms the deal directly — there is no seller stake
+turn**) → EN_ROUTE (head out; the seller's head-out places their deposit card hold) →
 AT_MEETUP (both arrive / geofence) → CONFIRMING (release code entered) →
 **RELEASED**. Seller gets price − their fee share and their card hold is released
 untouched; buyer gets deposit − their fee share back (≥ $1); platform keeps the
@@ -47,25 +61,28 @@ total fee.
 ## Backing out / cancelling  ← (reviewed & fixed)
 The line is **"heading out."**
 - **Before anyone heads out** (DRAFT/AGREED/ARMED): back out any time, **free** —
-  the buyer is refunded in full (price + $5 deposit); the seller was never
+  the buyer is refunded in full (price + deposit); the seller was never
   charged anything to begin with. No penalty, no fees.
 - **After you've headed out** (EN_ROUTE): backing out is a **self-declared no-show** —
-  you **forfeit your entire $5 deposit to the other party**, who is made whole:
-  - Buyer backs out: the price returns to the buyer; their escrowed $5 deposit
-    pays the stood-up **seller**; any seller card hold is released.
-  - Seller backs out: the buyer's escrow (price + $5) is refunded in full AND the
-    seller's $5 card hold is captured and routed to the **buyer**.
-  **No fees on a no-show — the company keeps $0.** Small trust hit either way.
+  you **forfeit your deposit to the other party**, who is made whole (they keep
+  80%; MeetMe keeps a 20% recovery fee):
+  - Buyer backs out: the price returns to the buyer; their escrowed deposit
+    pays the stood-up **seller** (minus the recovery fee); any seller card hold is released.
+  - Seller backs out: the buyer's escrow (price + deposit) is refunded in full AND the
+    seller's card hold is captured and routed to the **buyer** (minus the recovery fee).
+  **The only fee on a no-show is the 20% recovery fee** the company keeps; the
+  stood-up party keeps the other 80%. Small trust hit either way.
 - **At the meetup** (AT_MEETUP): you can't just cancel — if something's wrong it's a
   **dispute**.
 
 ## No-show (automatic, via the worker)
 EN_ROUTE with one party present and the other absent past the window → the absent
-party forfeits their $5 deposit **to the stood-up party**; the present party is
-fully refunded. Same economics as a self-declared back-out (a stood-up buyer gets
-their $155 escrow back plus the seller's captured $5 on a $150 deal — completely
-whole; platform $0). If the seller never even headed out (so no hold exists),
-their card on file is charged directly.
+party forfeits their deposit **to the stood-up party** (who keeps 80%; MeetMe keeps
+the 20% recovery fee); the present party is fully refunded. Same economics as a
+self-declared back-out (a stood-up buyer on a $150 deal gets their $157.50 escrow
+back plus **$6** of the seller's captured $7.50 deposit — completely whole; the
+platform keeps the $1.50 recovery fee). If the seller never even headed out (so no
+hold exists), their card on file is charged directly.
 **If collection fails** (empty/prepaid card, chargeback): the company absorbs the
 payout to the wronged party and the seller takes a massive trust hit.
 
