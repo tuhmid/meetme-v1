@@ -138,7 +138,7 @@ export function turnGuidance(deal: Deal, role: Role, otherFirst: string, demoHin
   if (myTurn) {
     let title = 'Your move';
     let body = '';
-    if (s === 'DRAFT') { title = 'Review and accept the terms'; body = 'Nothing is charged until the buyer funds the escrow.'; }
+    if (s === 'DRAFT') { title = 'Review and accept the terms'; body = `Your fee is ${formatMoney(sellerFeeCents(deal.totalFeeCents, deal.commitmentCents))}, charged only if the deal completes. Nothing is charged now — the buyer funds next.`; }
     else if (s === 'AGREED') { title = 'Fund the escrow'; body = `${formatMoney(deal.amountCents)} item + ${formatMoney(deal.commitmentCents)} deposit. Complete the deal and ${formatMoney(deal.commitmentCents - buyerFeeCents(deal.totalFeeCents, deal.commitmentCents))} of it comes back — the rest is the fee, only ever kept on a completed deal.`; }
     else if (s === 'ARMED') {
       title = "Head out when you're ready";

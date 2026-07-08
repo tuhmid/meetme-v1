@@ -76,22 +76,32 @@ export default function HomeScreen() {
               <Animated.View entering={enterSection(0)}>
                 <SectionLabel style={{ marginTop: 6 }}>Invites for you</SectionLabel>
               </Animated.View>
-              {invites.map((iv, i) => (
-                // keyed by token so a freshly arrived invite animates in on its own
-                <Animated.View key={iv.token} entering={enterSection(i)}>
-                  <Card style={{ marginBottom: 10 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <Text numberOfLines={1} style={{ flex: 1, fontWeight: '700', fontSize: 16, color: theme.colors.text, marginRight: 10 }}>{iv.itemDescription}</Text>
-                      <Text style={{ fontWeight: '700', fontSize: 16, color: theme.colors.text }}>{formatMoney(iv.amountCents)}</Text>
-                    </View>
-                    <Text style={{ color: theme.colors.textDim, marginTop: 3, fontSize: 13 }}>from {iv.inviterName} · you'd be the {iv.yourRole}</Text>
-                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                      <View style={{ flex: 1 }}><Button label="Accept" onPress={() => acceptInvite(iv.token)} /></View>
-                      <View style={{ flex: 1 }}><Button variant="secondary" label="Decline" onPress={() => declineInvite(iv.token)} /></View>
-                    </View>
-                  </Card>
-                </Animated.View>
-              ))}
+              {invites.map((iv, i) => {
+                // Show the invitee THEIR fee share up front — the first thing they see before accepting.
+                const total = feeForAmount(iv.amountCents);
+                const myFee = iv.yourRole === 'seller' ? sellerFeeCents(total, depositForAmount(iv.amountCents)) : buyerFeeCents(total, depositForAmount(iv.amountCents));
+                return (
+                  // keyed by token so a freshly arrived invite animates in on its own
+                  <Animated.View key={iv.token} entering={enterSection(i)}>
+                    <Card style={{ marginBottom: 10 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Text numberOfLines={1} style={{ flex: 1, fontWeight: '700', fontSize: 16, color: theme.colors.text, marginRight: 10 }}>{iv.itemDescription}</Text>
+                        <Text style={{ fontWeight: '700', fontSize: 16, color: theme.colors.text }}>{formatMoney(iv.amountCents)}</Text>
+                      </View>
+                      <Text style={{ color: theme.colors.textDim, marginTop: 3, fontSize: 13 }}>from {iv.inviterName} · you'd be the {iv.yourRole}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 8, backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radius.sm, paddingVertical: 7, paddingHorizontal: 10 }}>
+                        <Text style={{ color: theme.colors.textDim, fontSize: 13 }}>Your MeetMe fee </Text>
+                        <Text style={{ color: theme.colors.primary, fontSize: 15, fontWeight: '800' }}>{formatMoney(myFee)}</Text>
+                        <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginLeft: 6 }}>· only if the deal completes</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                        <View style={{ flex: 1 }}><Button label="Accept" onPress={() => acceptInvite(iv.token)} /></View>
+                        <View style={{ flex: 1 }}><Button variant="secondary" label="Decline" onPress={() => declineInvite(iv.token)} /></View>
+                      </View>
+                    </Card>
+                  </Animated.View>
+                );
+              })}
             </>
           )}
 
