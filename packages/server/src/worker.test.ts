@@ -62,6 +62,19 @@ describe('worker: dueTransition (pure timing)', () => {
     expect(dueTransition(onlyBuyerOut, now, DEFAULT_WINDOWS)).toBeNull();
   });
 
+  it('scheduled: no-show anchors to the agreed time + grace (one-sided → absent party; neither → both)', () => {
+    const T = 1_000_000_000;
+    const g = DEFAULT_WINDOWS.graceMs;
+    // buyer at the spot, seller absent, past T+grace -> seller no-show
+    const oneSided = base({ state: 'EN_ROUTE', meetupConfirmed: true, meetupTime: T, buyerArrived: true, sellerArrived: false }, T);
+    expect(dueTransition(oneSided, T + g + 1, DEFAULT_WINDOWS)).toEqual({ type: 'EXPIRE_NO_SHOW', noShow: 'seller' });
+    // neither arrived (even from ARMED) -> refund both
+    const neither = base({ state: 'ARMED', meetupConfirmed: true, meetupTime: T, buyerArrived: false, sellerArrived: false }, T);
+    expect(dueTransition(neither, T + g + 1, DEFAULT_WINDOWS)).toEqual({ type: 'EXPIRE_NO_SHOW', noShow: 'both' });
+    // before the grace: nothing
+    expect(dueTransition(oneSided, T + g - 1000, DEFAULT_WINDOWS)).toBeNull();
+  });
+
   it('auto-release fires after the confirm window', () => {
     const now = 1_000_000_000;
     const due = base({ state: 'CONFIRMING' }, now - DEFAULT_WINDOWS.confirmMs - 1);
@@ -85,7 +98,7 @@ describe('worker: runWorkerOnce (driver)', () => {
     // seller's captured deposit paid FORWARD to the buyer (a payout, not a refund)
     const transfers = await repo.listTransfers(dealId);
     expect(transfers.some((t) => t.direction === 'refund_buyer' && t.amountCents === 300_00 + 5_00)).toBe(true);
-    expect(transfers.some((t) => t.direction === 'payout_buyer' && t.amountCents === 5_00)).toBe(true);
+    expect(transfers.some((t) => t.direction === 'payout_buyer' && t.amountCents === 4_00)).toBe(true); // $4 comp ($1 recovery fee kept)
     expect([...rail.holds.values()].some((h) => h.userId === seller.id && h.status === 'captured')).toBe(true);
     void buyer;
   });

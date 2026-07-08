@@ -11,14 +11,17 @@ import type { ServerCtx } from './ctx';
 // and a controlled clock. Runs periodically (see apps/api/src/worker.ts).
 
 export interface WorkerWindows {
-  /** EN_ROUTE, one party arrived, the other absent this long -> the absent party is a no-show. */
+  /** ASAP: EN_ROUTE, one party arrived, the other absent this long -> the absent party is a no-show. */
   noShowMs: number;
+  /** Scheduled: how long after the agreed time before a no-show fires. */
+  graceMs: number;
   /** CONFIRMING this long without the buyer confirming -> AUTO_RELEASE. */
   confirmMs: number;
 }
 
 export const DEFAULT_WINDOWS: WorkerWindows = {
   noShowMs: 30 * 60_000, // 30 min
+  graceMs: 20 * 60_000, // 20 min past the agreed time
   confirmMs: 60 * 60_000, // 60 min
 };
 
@@ -30,15 +33,25 @@ export const DEFAULT_WINDOWS: WorkerWindows = {
 export function dueTransition(rec: DealRecord, now: number, w: WorkerWindows): Action | null {
   const { deal, updatedAt } = rec;
   const age = now - updatedAt;
+  const scheduled = deal.meetupConfirmed && deal.meetupTime != null;
 
-  // A no-show only counts once BOTH sides committed to travel (both tapped "heading
-  // out"). Without this, one party could head out, arrive, and run the other's clock
-  // down to a forfeit even though they never agreed to meet then. Requiring both
-  // head-outs means you can only be forfeited if you committed and then didn't arrive.
-  if (deal.state === 'EN_ROUTE' && age >= w.noShowMs && deal.buyerHeadedOut && deal.sellerHeadedOut) {
+  // Scheduled deals: the no-show clock is the AGREED TIME + grace (not head-out). Both
+  // confirming the time IS the commitment, so at the deadline whoever isn't at the spot
+  // is the no-show; if NEITHER showed, refund both (no fault). Applies from ARMED too,
+  // since a party might never head out.
+  if (deal.meetupConfirmed && deal.meetupTime != null && (deal.state === 'ARMED' || deal.state === 'EN_ROUTE') && now >= deal.meetupTime + w.graceMs) {
     if (deal.buyerArrived && !deal.sellerArrived) return { type: 'EXPIRE_NO_SHOW', noShow: 'seller' };
     if (deal.sellerArrived && !deal.buyerArrived) return { type: 'EXPIRE_NO_SHOW', noShow: 'buyer' };
-    return null; // neither arrived -> no clear fault; leave for a manual cancel
+    return { type: 'EXPIRE_NO_SHOW', noShow: 'both' };
+  }
+
+  // ASAP deals: a no-show only counts once BOTH sides committed to travel (both tapped
+  // "heading out"). Without this, one party could head out, arrive, and run the other's
+  // clock to a forfeit even though they never agreed to meet then.
+  if (!scheduled && deal.state === 'EN_ROUTE' && age >= w.noShowMs && deal.buyerHeadedOut && deal.sellerHeadedOut) {
+    if (deal.buyerArrived && !deal.sellerArrived) return { type: 'EXPIRE_NO_SHOW', noShow: 'seller' };
+    if (deal.sellerArrived && !deal.buyerArrived) return { type: 'EXPIRE_NO_SHOW', noShow: 'buyer' };
+    return null; // neither arrived, no agreed deadline -> no clear fault; leave for a manual cancel
   }
 
   if (deal.state === 'CONFIRMING' && age >= w.confirmMs) {

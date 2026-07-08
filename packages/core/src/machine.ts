@@ -10,7 +10,7 @@
 // one DB transaction. Pure + deterministic (all time/ids/codes come from ctx).
 // ---------------------------------------------------------------------------
 
-import { DEPOSIT_CENTS, computeTotalFeeCents, splitFee, usd, type Cents } from './money';
+import { DEPOSIT_CENTS, RECOVERY_FEE_CENTS, computeTotalFeeCents, splitFee, usd, type Cents } from './money';
 import { canTransition, type DealState } from './states';
 import {
   PLATFORM_FEES,
@@ -56,6 +56,9 @@ export function createDeal(input: {
     meetupLat: null,
     meetupLng: null,
     meetupCustom: false,
+    meetupTime: null,
+    meetupProposedBy: null,
+    meetupConfirmed: false,
     sellerHoldId: null,
     faultParty: null,
     resolutionNote: null,
@@ -104,29 +107,31 @@ function splitLedger(deal: Deal, ctx: Ctx): LedgerEntry[] {
 }
 
 function noShowLedger(deal: Deal, noShow: Role, ctx: Ctx): LedgerEntry[] {
-  // no fees ever on a no-show — the flake's whole $5 deposit goes to the
-  // stood-up party, and the company keeps nothing
+  // The flake's $5 deposit compensates the stood-up party ($4), and MeetMe keeps a
+  // $1 recovery fee (a forfeited deal earns no platform fee). No item fee is charged.
   const h = escrowHeld(deal);
+  const comp = deal.commitmentCents - RECOVERY_FEE_CENTS; // $4 to the stood-up party
   const txn = ctx.newTxnId();
   if (noShow === 'seller') {
-    // buyer fully refunded from escrow (price + their deposit); the seller's
-    // deposit is collected off their card and routed to the buyer. The capture
-    // is its own zero-sum txn — that money was never in escrow, it moves
-    // seller bank -> buyer bank.
+    // buyer fully refunded from escrow (price + their deposit); the seller's deposit
+    // is collected off their card — $4 routed to the buyer, $1 to platform fees. The
+    // capture is its own zero-sum txn (that money was never in escrow).
     const capture = ctx.newTxnId();
     return nonZero([
       entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'no_show'),
       entry(txn, bankAcct(deal.buyerId), h.amount + h.buyerDeposit, deal.id, 'present_refund'),
       entry(capture, bankAcct(deal.sellerId), -deal.commitmentCents, deal.id, 'deposit_capture'),
-      entry(capture, bankAcct(deal.buyerId), deal.commitmentCents, deal.id, 'stood_up_compensation'),
+      entry(capture, bankAcct(deal.buyerId), comp, deal.id, 'stood_up_compensation'),
+      entry(capture, PLATFORM_FEES, RECOVERY_FEE_CENTS, deal.id, 'no_show_recovery_fee'),
     ]);
   }
-  // buyer no-show: the price returns; the buyer's escrowed deposit goes to the
-  // stood-up seller, not the company
+  // buyer no-show: the price returns; the buyer's escrowed deposit is split
+  // $4 to the stood-up seller, $1 to platform fees.
   return nonZero([
     entry(txn, escrowAcct(deal.id), -heldTotal(h), deal.id, 'no_show'),
     entry(txn, bankAcct(deal.buyerId), h.amount, deal.id, 'price_return'),
-    entry(txn, bankAcct(deal.sellerId), h.buyerDeposit, deal.id, 'stood_up_compensation'),
+    entry(txn, bankAcct(deal.sellerId), comp, deal.id, 'stood_up_compensation'),
+    entry(txn, PLATFORM_FEES, RECOVERY_FEE_CENTS, deal.id, 'no_show_recovery_fee'),
   ]);
 }
 
@@ -218,6 +223,40 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
         deal,
         { meetupName: action.name, meetupLat: action.lat, meetupLng: action.lng, meetupCustom: action.custom },
         ev(ctx, action.actor, 'meetup_set', `Meetup set: ${action.name}${action.custom ? ' (custom spot)' : ''}.`)
+      );
+    }
+
+    case 'PROPOSE_MEETUP': {
+      // Propose where + when (time null = ASAP). Needs the other side to CONFIRM before
+      // it's locked — so a forfeit can only ever run against a time both accepted.
+      if (!['DRAFT', 'AGREED', 'FUNDED', 'ARMED'].includes(deal.state)) return reject(`cannot arrange the meetup from ${deal.state}`);
+      if (!action.name.trim()) return reject('meetup name required');
+      const when = action.time == null ? ' — meet ASAP' : '';
+      return mutate(
+        deal,
+        {
+          meetupName: action.name, meetupLat: action.lat, meetupLng: action.lng, meetupCustom: action.custom,
+          meetupTime: action.time, meetupProposedBy: action.actor, meetupConfirmed: false,
+        },
+        ev(ctx, action.actor, 'meetup_proposed', `${action.actor} proposed ${action.name}${action.custom ? ' (custom spot)' : ''}${when}.`)
+      );
+    }
+
+    case 'CONFIRM_MEETUP': {
+      if (!['DRAFT', 'AGREED', 'FUNDED', 'ARMED'].includes(deal.state)) return reject(`cannot confirm the meetup from ${deal.state}`);
+      if (!deal.meetupName || deal.meetupProposedBy === null) return reject('no meetup has been proposed yet');
+      if (action.actor === deal.meetupProposedBy) return reject('you proposed this meetup — the other person confirms it');
+      // A SCHEDULED deal places the seller's $5 hold now (their commitment to the time)
+      // so the deposit exists by then; ASAP places it at head-out instead.
+      const scheduled = deal.meetupTime != null;
+      const effects: SideEffect[] = scheduled && !deal.sellerHoldId
+        ? [{ type: 'hold_seller_commitment', sellerId: deal.sellerId, amountCents: deal.commitmentCents }]
+        : [];
+      return mutate(
+        deal,
+        { meetupConfirmed: true },
+        ev(ctx, action.actor, 'meetup_confirmed', `Meetup confirmed: ${deal.meetupName}${scheduled ? '' : ' — ASAP'}.`),
+        effects
       );
     }
 
@@ -357,8 +396,17 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
     }
 
     case 'EXPIRE_NO_SHOW': {
+      if (action.noShow === 'both') {
+        // Neither showed by the agreed time — no fault, no fee, everyone made whole.
+        const note = 'Neither party arrived by the meetup time — everyone refunded in full.';
+        return transition(deal, 'EXPIRED_NO_SHOW', ev(ctx, 'system', 'no_show', note), {
+          ledger: refundAllLedger(deal, ctx),
+          effects: deal.sellerHoldId ? [{ type: 'release_seller_hold' }] : [],
+          patch: { faultParty: null, resolutionNote: note },
+        });
+      }
       const present = otherRole(action.noShow);
-      const note = `${action.noShow} never arrived. ${present} fully refunded; the no-show's ${usd(deal.commitmentCents)} deposit went to the ${present}.`;
+      const note = `${action.noShow} never arrived. ${present} fully refunded; ${usd(deal.commitmentCents - RECOVERY_FEE_CENTS)} of the no-show's ${usd(deal.commitmentCents)} deposit went to the ${present} (MeetMe kept a ${usd(RECOVERY_FEE_CENTS)} recovery fee).`;
       return transition(deal, 'EXPIRED_NO_SHOW', ev(ctx, 'system', 'no_show', note), {
         ledger: noShowLedger(deal, action.noShow, ctx),
         effects: faultEffects(deal, action.noShow),

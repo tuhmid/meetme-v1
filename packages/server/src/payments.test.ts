@@ -93,7 +93,7 @@ describe('M2 seller commitment hold (card on file)', () => {
     // the captured $5 goes OUT to the buyer (a forward payout), alongside their full escrow refund
     const transfers = await repo.listTransfers(dealId);
     expect(transfers.some((t) => t.direction === 'refund_buyer' && t.amountCents === 300_00 + 5_00)).toBe(true); // escrow made whole
-    expect(transfers.some((t) => t.direction === 'payout_buyer' && t.amountCents === 5_00)).toBe(true); // + the seller's captured deposit
+    expect(transfers.some((t) => t.direction === 'payout_buyer' && t.amountCents === 4_00)).toBe(true); // + $4 of the seller's captured deposit
   });
 
   it('collects off the card even when the seller never headed out (no prior hold)', async () => {

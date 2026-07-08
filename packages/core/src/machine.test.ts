@@ -97,9 +97,10 @@ describe('no-show: the deposit goes to the stood-up party', () => {
     expect(r.deal.state).toBe('EXPIRED_NO_SHOW');
     expect(r.deal.faultParty).toBe('seller');
     expect(balanced(r.ledger)).toBe(true);
-    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 5_00 + 5_00); // full refund + the seller's captured deposit
-    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(-5_00); // collected off the seller's card
-    expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0); // the company keeps nothing
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 5_00 + 4_00); // full refund + $4 of the seller's captured deposit
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(-5_00); // whole $5 collected off the seller's card
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(1_00); // $1 recovery fee
+    expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0);
     expect(r.effects).toContainEqual({ type: 'trust_delta', userId: 'sam', delta: -6 });
     expect(r.effects).toContainEqual({ type: 'capture_seller_commitment', toUserId: 'maya', amountCents: 5_00 });
   });
@@ -116,10 +117,71 @@ describe('no-show: the deposit goes to the stood-up party', () => {
     expect(r.deal.faultParty).toBe('buyer');
     expect(balanced(r.ledger)).toBe(true);
     expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00); // price back, NOT the deposit
-    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(5_00); // the buyer's deposit, to the seller
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(4_00); // $4 of the buyer's deposit, to the seller
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(1_00); // $1 recovery fee
     expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0);
     expect(r.effects).toContainEqual({ type: 'trust_delta', userId: 'maya', delta: -6 });
     expect(r.effects).toContainEqual({ type: 'release_seller_hold' }); // seller headed out; their hold is let go
+  });
+});
+
+describe('meetup arrangement (propose → confirm)', () => {
+  const armed = () => drive(newDeal(300_00), makeCtx(), [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }]).deal;
+
+  it('propose sets a pending meetup; the OTHER side confirms it (ASAP, no hold at confirm)', () => {
+    const ctx = makeCtx();
+    const proposed = applyAction(armed(), { type: 'PROPOSE_MEETUP', actor: 'buyer', name: 'Precinct', lat: 1, lng: 2, custom: false, time: null }, ctx);
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+    expect(proposed.deal.meetupProposedBy).toBe('buyer');
+    expect(proposed.deal.meetupConfirmed).toBe(false);
+    expect(proposed.deal.meetupTime).toBeNull();
+    // the proposer cannot confirm their own proposal
+    expect(applyAction(proposed.deal, { type: 'CONFIRM_MEETUP', actor: 'buyer' }, ctx).ok).toBe(false);
+    const confirmed = applyAction(proposed.deal, { type: 'CONFIRM_MEETUP', actor: 'seller' }, ctx);
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) return;
+    expect(confirmed.deal.meetupConfirmed).toBe(true);
+    expect(confirmed.effects.some((e) => e.type === 'hold_seller_commitment')).toBe(false); // ASAP holds at head-out
+  });
+
+  it('a SCHEDULED confirm places the seller commitment hold up front', () => {
+    const ctx = makeCtx();
+    const proposed = applyAction(armed(), { type: 'PROPOSE_MEETUP', actor: 'seller', name: 'Precinct', lat: 1, lng: 2, custom: false, time: 1_700_000_900_000 }, ctx);
+    if (!proposed.ok) return;
+    const confirmed = applyAction(proposed.deal, { type: 'CONFIRM_MEETUP', actor: 'buyer' }, ctx);
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) return;
+    expect(confirmed.deal.meetupTime).toBe(1_700_000_900_000);
+    expect(confirmed.effects).toContainEqual({ type: 'hold_seller_commitment', sellerId: 'sam', amountCents: 5_00 });
+  });
+
+  it('rescheduling (a new proposal) re-opens confirmation', () => {
+    const ctx = makeCtx();
+    const p1 = applyAction(armed(), { type: 'PROPOSE_MEETUP', actor: 'buyer', name: 'A', lat: 1, lng: 2, custom: false, time: null }, ctx);
+    if (!p1.ok) return;
+    const c1 = applyAction(p1.deal, { type: 'CONFIRM_MEETUP', actor: 'seller' }, ctx);
+    if (!c1.ok) return;
+    expect(c1.deal.meetupConfirmed).toBe(true);
+    const p2 = applyAction(c1.deal, { type: 'PROPOSE_MEETUP', actor: 'seller', name: 'B', lat: 3, lng: 4, custom: false, time: null }, ctx);
+    if (!p2.ok) return;
+    expect(p2.deal.meetupConfirmed).toBe(false); // reschedule reopens
+    expect(p2.deal.meetupName).toBe('B');
+  });
+});
+
+describe('mutual no-show (neither showed by the agreed time)', () => {
+  it('refunds both in full — no fault, no recovery fee', () => {
+    const ctx = makeCtx();
+    const enRoute = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'buyer' }]).deal;
+    const r = applyAction(enRoute, { type: 'EXPIRE_NO_SHOW', noShow: 'both' }, ctx);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.deal.state).toBe('EXPIRED_NO_SHOW');
+    expect(r.deal.faultParty).toBeNull();
+    expect(balanced(r.ledger)).toBe(true);
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 5_00); // buyer fully refunded
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(0); // no fee on a mutual flake
   });
 });
 
@@ -142,9 +204,9 @@ describe('cancel / dispute split', () => {
     if (!r.ok) return;
     expect(r.deal.faultParty).toBe('buyer');
     expect(balanced(r.ledger)).toBe(true);
-    expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0); // nothing to the company
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(1_00); // $1 recovery fee
     expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00); // price back, NOT the deposit
-    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(5_00); // the stood-up seller gets it
+    expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(4_00); // $4 of the forfeited deposit to the stood-up seller
   });
 
   it('seller backing out AFTER heading out gets their card deposit captured for the buyer', () => {
@@ -155,8 +217,9 @@ describe('cancel / dispute split', () => {
     if (!r.ok) return;
     expect(r.deal.faultParty).toBe('seller');
     expect(balanced(r.ledger)).toBe(true);
-    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 5_00 + 5_00); // made whole + compensation
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(300_00 + 5_00 + 4_00); // made whole + $4 compensation
     expect(balanceOf(r.ledger, bankAcct('sam'))).toBe(-5_00);
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(1_00); // $1 recovery fee
     expect(r.effects).toContainEqual({ type: 'capture_seller_commitment', toUserId: 'maya', amountCents: 5_00 });
   });
 
@@ -392,7 +455,7 @@ describe('worked examples (whole-deal money)', () => {
     expect(ledger.reduce((s, e) => s + e.amountCents, 0)).toBe(0);
   });
 
-  it('$150 seller no-show: buyer made completely whole ($155 refund + $5 capture), platform $0', () => {
+  it('$150 seller no-show: buyer made whole ($155 refund + $4 comp), platform keeps a $1 recovery fee', () => {
     const ctx = makeCtx();
     const enRoute = drive(deal(150_00), ctx, [
       { type: 'ACCEPT_TERMS' }, { type: 'FUND' }, { type: 'HEAD_OUT', actor: 'buyer' }, { type: 'ARRIVE', party: 'buyer' },
@@ -402,10 +465,11 @@ describe('worked examples (whole-deal money)', () => {
     if (!r.ok) return;
 
     expect(r.ledger.find((e) => e.memo === 'present_refund')?.amountCents).toBe(155_00);
-    expect(r.ledger.find((e) => e.memo === 'stood_up_compensation')?.amountCents).toBe(5_00);
-    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(160_00); // $155 back + the seller's $5
-    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(0);
-    expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0); // company gets $0 on no-shows
+    expect(r.ledger.find((e) => e.memo === 'stood_up_compensation')?.amountCents).toBe(4_00);
+    expect(r.ledger.find((e) => e.memo === 'no_show_recovery_fee')?.amountCents).toBe(1_00);
+    expect(balanceOf(r.ledger, bankAcct('maya'))).toBe(159_00); // $155 back + $4 of the seller's $5
+    expect(balanceOf(r.ledger, PLATFORM_FEES)).toBe(1_00); // $1 recovery fee
+    expect(balanceOf(r.ledger, PLATFORM_PENALTY)).toBe(0);
     expect(balanced(r.ledger)).toBe(true);
   });
 });

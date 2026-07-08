@@ -35,6 +35,9 @@ export interface Deal {
   meetupLat: number | null;
   meetupLng: number | null;
   meetupCustom: boolean; // true = user-entered (not a verified safe spot)
+  meetupTime: number | null; // epoch ms of the agreed time; null = ASAP (coordinate live)
+  meetupProposedBy: Role | null; // who proposed the current (spot + time) arrangement
+  meetupConfirmed: boolean; // both sides agreed on where + when
   sellerHoldId: string | null; // card hold on the seller's commitment; set by the server after the rail places it
   faultParty: Role | null;
   resolutionNote: string | null;
@@ -93,7 +96,9 @@ export type Action =
   | { type: 'HEAD_OUT'; actor: Role }
   | { type: 'ARRIVE'; party: Role }
   | { type: 'CO_LOCATED' } // system: both phones detected together at the meetup
-  | { type: 'SET_MEETUP'; actor: Role; name: string; lat: number; lng: number; custom: boolean }
+  | { type: 'SET_MEETUP'; actor: Role; name: string; lat: number; lng: number; custom: boolean } // low-level spot-only set (tests / legacy)
+  | { type: 'PROPOSE_MEETUP'; actor: Role; name: string; lat: number; lng: number; custom: boolean; time: number | null } // spot + time (null = ASAP)
+  | { type: 'CONFIRM_MEETUP'; actor: Role } // the OTHER party accepts the proposed meetup
   | { type: 'REVEAL_CODE' }
   | { type: 'ENTER_CODE'; code: string }
   | { type: 'CONFIRM_RECEIVED' }
@@ -103,7 +108,7 @@ export type Action =
   | { type: 'PROPOSE_RESOLUTION'; actor: Role; outcome: DisputeOutcome } // self-service
   | { type: 'RESOLVE_DISPUTE'; outcome: DisputeOutcome } // admin/support
   | { type: 'CANCEL'; actor: Role }
-  | { type: 'EXPIRE_NO_SHOW'; noShow: Role }
+  | { type: 'EXPIRE_NO_SHOW'; noShow: Role | 'both' } // 'both' = neither showed → refund all, no fault/fee
   | { type: 'RATE'; actor: Role; stars: number };
 
 export type ApplyResult =

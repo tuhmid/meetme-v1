@@ -17,6 +17,14 @@ export const usd = (c: Cents): string => (c % 100 === 0 ? `$${c / 100}` : `$${(c
 export const DEPOSIT_CENTS: Cents = 5_00;
 
 /**
+ * On a no-show, the flake's $5 deposit compensates the stood-up party — but MeetMe
+ * keeps $1 of it as a recovery fee (a forfeited deal earns no platform fee yet still
+ * costs processing, so this keeps us from running underwater on flakes). The stood-up
+ * party gets the remaining $4. Never applied when NEITHER party shows.
+ */
+export const RECOVERY_FEE_CENTS: Cents = 1_00;
+
+/**
  * TOTAL platform fee for a completed deal (both sides combined — split with
  * splitFee). Tiered flat so users never do math; 5% above $500, capped at $50.
  * Charged only on completion.

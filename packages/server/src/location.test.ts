@@ -74,7 +74,7 @@ describe('M4 geofence — co-location auto-arrival', () => {
     await exec(s.user.id, { type: 'ACCEPT_TERMS' });
     await exec(b.user.id, { type: 'FUND' });
     const SPOT = { lat: 40.75, lng: -73.99 };
-    await exec(b.user.id, { type: 'SET_MEETUP', name: 'Midtown Precinct', lat: SPOT.lat, lng: SPOT.lng, custom: false });
+    await exec(b.user.id, { type: 'SET_MEETUP', actor: 'buyer', name: 'Midtown Precinct', lat: SPOT.lat, lng: SPOT.lng, custom: false });
     await exec(b.user.id, { type: 'HEAD_OUT', actor: 'buyer' });
 
     // buyer reaches the spot -> buyerArrived, but still EN_ROUTE (seller isn't here)
