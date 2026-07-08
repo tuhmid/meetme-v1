@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import type { Role, UserProfile } from '../api';
@@ -167,14 +168,32 @@ export function ProfileModal({ visible, loading, profile, onClose, onReportBlock
 export function MeetupTimePicker({ value, onChange }: { value: number | null; onChange: (t: number | null) => void }) {
   const theme = useTheme();
   const days = useMemo(() => dayOptions(), []); // stable for the life of the picker
+  const now = Date.now();
+  const buffer = now + 30 * 60_000; // a slot must be at least 30 min out
+  const todayStart = days[0].date;
+  const isPast = (day: number, hour: number) => day === todayStart && combineDayHour(day, hour) <= buffer;
+  const firstFutureHour = (day: number): number | null => TIME_OF_DAY.find((t) => !isPast(day, t.hour))?.hour ?? null;
+  // drop Today once all of its slots have passed — you can still meet ASAP or another day
+  const dayChips = days.filter((d) => d.date !== todayStart || firstFutureHour(d.date) !== null);
+
   const selDay = value != null ? dayStartOf(value) : null;
   const selHour = value != null ? hourOf(value) : null;
 
-  const chip = (label: string, active: boolean, onPress: () => void) => (
+  const pickDay = (day: number) => {
+    const keep = selHour != null && !isPast(day, selHour) ? selHour : (firstFutureHour(day) ?? 18);
+    onChange(combineDayHour(day, keep));
+  };
+  const pickHour = (hour: number) => {
+    const day = selDay != null && !isPast(selDay, hour) ? selDay : (dayChips.find((d) => !isPast(d.date, hour))?.date ?? dayChips[0]?.date ?? todayStart);
+    onChange(combineDayHour(day, hour));
+  };
+
+  const chip = (label: string, active: boolean, onPress: (() => void) | undefined, disabled = false) => (
     <Pressable
       key={label}
-      onPress={onPress}
-      style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: active ? theme.colors.primary : theme.colors.border, backgroundColor: active ? theme.colors.primarySoft : theme.colors.surface }}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
+      style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: active ? theme.colors.primary : theme.colors.border, backgroundColor: active ? theme.colors.primarySoft : theme.colors.surface, opacity: disabled ? 0.4 : 1 }}
     >
       <Text style={{ color: active ? theme.colors.primary : theme.colors.textDim, fontWeight: '600', fontSize: 13 }}>{label}</Text>
     </Pressable>
@@ -184,11 +203,14 @@ export function MeetupTimePicker({ value, onChange }: { value: number | null; on
     <View>
       <View style={{ flexDirection: 'row', marginBottom: 12 }}>{chip('ASAP · meet now', value === null, () => onChange(null))}</View>
       <Text style={{ color: theme.colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4, marginBottom: 7 }}>OR PICK A DAY</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }} style={{ marginBottom: 12 }}>
-        {days.map((d) => chip(d.label, selDay === d.date, () => onChange(combineDayHour(d.date, selHour ?? 18))))}
-      </ScrollView>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        {dayChips.map((d) => chip(d.label, selDay === d.date, () => pickDay(d.date)))}
+      </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, opacity: value === null ? 0.45 : 1 }}>
-        {TIME_OF_DAY.map((t) => chip(t.label, value !== null && selHour === t.hour, () => onChange(combineDayHour(selDay ?? days[0].date, t.hour))))}
+        {TIME_OF_DAY.map((t) => {
+          const disabled = isPast(selDay ?? todayStart, t.hour);
+          return chip(t.label, value !== null && selHour === t.hour, () => pickHour(t.hour), disabled);
+        })}
       </View>
     </View>
   );
@@ -203,11 +225,13 @@ export function MeetupTimePicker({ value, onChange }: { value: number | null; on
 export function SpringSheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: ReactNode }) {
   const theme = useTheme();
   const progress = useSharedValue(0);
+  const dragY = useSharedValue(0); // live downward drag on the grab handle
   const [mounted, setMounted] = useState(visible);
 
   useEffect(() => {
     if (visible) {
       setMounted(true);
+      dragY.value = 0;
       const { damping, stiffness, mass } = theme.motion.spring;
       progress.value = withSpring(1, { damping, stiffness, mass, overshootClamping: true });
     } else if (mounted) {
@@ -220,27 +244,39 @@ export function SpringSheet({ visible, onClose, children }: { visible: boolean; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  // Drag the grab handle down to dismiss — past a threshold (or a fast flick) closes.
+  const pan = Gesture.Pan()
+    .onUpdate((e) => { dragY.value = Math.max(0, e.translationY); })
+    .onEnd((e) => {
+      if (e.translationY > 90 || e.velocityY > 800) runOnJS(onClose)();
+      else dragY.value = withSpring(0, { damping: 20, stiffness: 220 });
+    });
+
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value * 0.45 }));
-  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - progress.value) * 620 }] }));
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - progress.value) * 620 + dragY.value }] }));
 
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000' }, backdropStyle]}>
-          <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
-        </Animated.View>
-        <Animated.View
-          style={[
-            { backgroundColor: theme.colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '86%', overflow: 'hidden' },
-            sheetStyle,
-          ]}
-        >
-          <View style={{ alignItems: 'center', paddingTop: 8 }}>
-            <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: theme.colors.border }} />
-          </View>
-          {children}
-        </Animated.View>
-      </View>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000' }, backdropStyle]}>
+            <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
+          </Animated.View>
+          <Animated.View
+            style={[
+              { backgroundColor: theme.colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '86%', overflow: 'hidden' },
+              sheetStyle,
+            ]}
+          >
+            <GestureDetector gesture={pan}>
+              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 4 }}>
+                <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: theme.colors.border }} />
+              </View>
+            </GestureDetector>
+            {children}
+          </Animated.View>
+        </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

@@ -204,7 +204,7 @@ const atHour = (base: number, h: number): number => { const x = new Date(base); 
  *  so the chip's value is STABLE across renders (unlike a moving "in 1 hour"). */
 export function dayOptions(now: number = Date.now()): { label: string; date: number }[] {
   const out: { label: string; date: number }[] = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 7; i++) {
     const d = new Date(now + i * 86_400_000);
     d.setHours(0, 0, 0, 0);
     out.push({ label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString([], { weekday: 'short' }), date: d.getTime() });

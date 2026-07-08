@@ -479,7 +479,7 @@ export default function DealScreen() {
                   <Pressable onPress={attachImage} style={{ justifyContent: 'center', paddingHorizontal: 8 }} hitSlop={8}>
                     <Ionicons name="image-outline" size={24} color={theme.colors.primary} />
                   </Pressable>
-                  <TextInput value={msgInput} onChangeText={setMsgInput} placeholder="Message…" style={[inputStyle(theme), { flex: 1, marginBottom: 0 }]} onSubmitEditing={sendMessage} returnKeyType="send" />
+                  <TextInput value={msgInput} onChangeText={setMsgInput} placeholder="Message…" placeholderTextColor={theme.colors.textMuted} style={[inputStyle(theme), { flex: 1, marginBottom: 0 }]} onSubmitEditing={sendMessage} returnKeyType="send" />
                   <Pressable onPress={sendMessage} style={{ backgroundColor: theme.colors.primary, borderRadius: theme.radius.md, paddingHorizontal: 16, justifyContent: 'center', marginLeft: 8 }} hitSlop={4}>
                     <Ionicons name="send" size={18} color={theme.colors.onPrimary} />
                   </Pressable>
@@ -560,7 +560,7 @@ export default function DealScreen() {
           <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: '700', marginBottom: 10 }}>When?</Text>
           <MeetupTimePicker value={proposeTime} onChange={setProposeTime} />
           <Text style={{ color: theme.colors.textDim, fontSize: 12, marginTop: 12, marginBottom: 14 }}>Tapping a spot proposes it for <Text style={{ fontWeight: '700', color: theme.colors.text }}>{formatMeetupTime(proposeTime)}</Text> — {theirName()} confirms.</Text>
-          <TextInput value={comingFrom} onChangeText={setComingFrom} placeholder="Start somewhere else? (optional)" style={inputStyle(theme)} />
+          <TextInput value={comingFrom} onChangeText={setComingFrom} placeholder="Start somewhere else? (optional)" placeholderTextColor={theme.colors.textMuted} style={inputStyle(theme)} />
           <Button variant="secondary" label="Search from this address" iconName="search" onPress={shareFromAddress} style={{ marginBottom: 8 }} />
           {!!meetupMsg && <Text style={{ color: theme.colors.textDim, marginBottom: 10 }}>{meetupMsg}</Text>}
           {deal && suggestions.map((s, i) => {
@@ -582,7 +582,7 @@ export default function DealScreen() {
           <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: 14 }} />
           <Text style={{ fontWeight: '700', marginBottom: 4, color: theme.colors.text }}>Custom spot</Text>
           <Text style={{ color: theme.colors.textDim, fontSize: 12, marginBottom: 8 }}>Pick your own place — but it won't be a verified safe location.</Text>
-          <TextInput value={customSpot} onChangeText={setCustomSpot} placeholder="Custom address" style={inputStyle(theme)} />
+          <TextInput value={customSpot} onChangeText={setCustomSpot} placeholder="Custom address" placeholderTextColor={theme.colors.textMuted} style={inputStyle(theme)} />
           <Button variant="secondary" label="Use a custom spot" onPress={useCustomSpot} />
           <Pressable onPress={() => setMeetupOpen(false)} style={{ marginTop: 12 }}><Text style={{ color: theme.colors.textDim, textAlign: 'center' }}>Close</Text></Pressable>
         </ScrollView>

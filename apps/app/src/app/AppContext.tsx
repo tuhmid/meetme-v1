@@ -352,7 +352,10 @@ function useAppState() {
   // Propose a meetup (spot + the selected time; null = ASAP). The OTHER side confirms.
   const proposeMeetup = (spot: { name: string; lat: number; lng: number; custom: boolean }) =>
     run(async () => {
-      await api.act(bearer(), dealId!, { type: 'PROPOSE_MEETUP', actor: myRole(deal!), name: spot.name, lat: spot.lat, lng: spot.lng, custom: spot.custom, time: proposeTime });
+      // never propose a time already in the past (a stale selection) — it would trip the
+      // no-show clock instantly. Fall back to ASAP.
+      const time = proposeTime != null && proposeTime > Date.now() ? proposeTime : null;
+      await api.act(bearer(), dealId!, { type: 'PROPOSE_MEETUP', actor: myRole(deal!), name: spot.name, lat: spot.lat, lng: spot.lng, custom: spot.custom, time });
       setMeetupOpen(false);
       await pullDeal(bearer(), dealId!);
     });
