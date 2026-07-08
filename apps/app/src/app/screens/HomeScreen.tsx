@@ -9,7 +9,7 @@ import { useTheme } from '../../theme';
 import { Button, Callout, Card, DealHistoryRow, SectionLabel } from '../../ui';
 import { useApp } from '../AppContext';
 import { RoleBar, RolePick } from '../components';
-import { centsFromInput, formatMoney, formatPhone, inputStyle } from '../dealLogic';
+import { centsFromInput, feeForAmount, formatMoney, formatPhone, inputStyle } from '../dealLogic';
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -99,7 +99,16 @@ export default function HomeScreen() {
           <SectionLabel style={{ marginTop: 14 }}>Start a deal</SectionLabel>
           <Card>
             <TextInput value={item} onChangeText={setItem} placeholder="Item (e.g. iPhone 12, 128GB)" style={inputStyle(theme)} />
-            <TextInput value={amountCents ? formatMoney(amountCents) : ''} onChangeText={(t) => setAmountCents(centsFromInput(t))} placeholder="$0.00" keyboardType="number-pad" style={inputStyle(theme)} />
+            <TextInput value={amountCents ? formatMoney(amountCents) : ''} onChangeText={(t) => setAmountCents(centsFromInput(t))} placeholder="$0.00" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" style={inputStyle(theme)} />
+            {amountCents > 0 && (
+              <Animated.View entering={FadeIn.duration(200)} style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: -2, marginBottom: 12, paddingHorizontal: 2 }}>
+                <Text style={{ color: theme.colors.textDim, fontSize: 13 }}>MeetMe fee </Text>
+                <Animated.Text key={feeForAmount(amountCents)} entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={{ color: theme.colors.primary, fontSize: 15, fontWeight: '800' }}>
+                  {formatMoney(feeForAmount(amountCents))}
+                </Animated.Text>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginLeft: 6 }}>· charged only when the deal completes</Text>
+              </Animated.View>
+            )}
             {session ? (
               <>
                 <TextInput value={cpPhone} onChangeText={(t) => setCpPhone(formatPhone(t))} placeholder="555-123-4567" keyboardType="phone-pad" maxLength={12} style={inputStyle(theme)} />

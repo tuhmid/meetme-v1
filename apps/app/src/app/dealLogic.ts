@@ -17,6 +17,19 @@ export const phoneValid = (v: string): boolean => phoneDigits(v).length === 10;
 export const centsFromInput = (v: string): number => parseInt(v.replace(/\D/g, '') || '0', 10); // cash-register style
 export const formatMoney = (cents: number): string => `$${(cents / 100).toFixed(2)}`; // exact — never rounds to whole dollars
 
+// mirror of core computeTotalFeeCents: the TOTAL MeetMe fee for a deal of this size
+// (tiered flat, then 5% above $500 capped at $50). Charged only on completion.
+export const feeForAmount = (amountCents: number): number => {
+  if (amountCents <= 0) return 0;
+  if (amountCents <= 40_00) return 5_00;
+  if (amountCents <= 80_00) return 7_00;
+  if (amountCents <= 120_00) return 9_00;
+  if (amountCents <= 200_00) return 10_00;
+  if (amountCents <= 300_00) return 12_00;
+  if (amountCents <= 500_00) return 15_00;
+  return Math.min(Math.round(amountCents * 0.05), 50_00);
+};
+
 // mirror of core splitFee: buyer's fee share is capped at $4 so completing a
 // deal always returns at least $1 of the $5 deposit
 export const buyerFeeCents = (totalFeeCents: number): number => Math.min(Math.floor(totalFeeCents / 2), 400);

@@ -23,7 +23,7 @@ export default function DealScreen() {
   const [scanOpen, setScanOpen] = useState(false); // QR scanner modal (seller side)
   const [chatOpen, setChatOpen] = useState(false); // full-screen chat
   const [helpOpen, setHelpOpen] = useState(false); // help & safety sheet
-  const [lastSeenMsgCount, setLastSeenMsgCount] = useState(0); // for the chat-bubble unread badge
+  const [lastSeenMsgCount, setLastSeenMsgCount] = useState<Record<string, number>>({}); // per-user seen count for the unread badge
   const { duration, spring } = theme.motion;
   // staggered section entrance; plain fade when the user prefers reduced motion
   const enterSection = (i: number) =>
@@ -56,10 +56,12 @@ export default function DealScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sellerAtMeetup, code]);
 
-  // Chat-bubble unread badge: while chat is open keep the seen count current; when closed,
-  // any messages beyond it are unread.
-  useEffect(() => { if (chatOpen) setLastSeenMsgCount(messages.length); }, [chatOpen, messages.length]);
-  const unread = Math.max(0, messages.length - lastSeenMsgCount);
+  // Chat-bubble unread badge, tracked PER USER (so switching demo personas — or two real
+  // devices — each see their own unread). "Seen" = you had the chat open at that count;
+  // unread only counts messages the OTHER person sent since then.
+  const me = myId();
+  useEffect(() => { if (chatOpen) setLastSeenMsgCount((s) => ({ ...s, [me]: messages.length })); }, [chatOpen, messages.length, me]);
+  const unread = messages.slice(lastSeenMsgCount[me] ?? 0).filter((m) => m.senderId !== me).length;
 
   // initial pull — was gated on `phase === 'deal'`
   useFocusEffect(
