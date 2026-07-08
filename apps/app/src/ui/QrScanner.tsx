@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { Button } from './Button';
 
@@ -46,28 +47,39 @@ export function QrScanner({ visible, onClose, onScan }: QrScannerProps) {
           />
         )}
 
-        {/* centered column overlay: title on top, action on the bottom, spaced evenly */}
-        <View style={{ flex: 1, justifyContent: 'space-between', alignItems: 'center', paddingTop: 76, paddingBottom: 52, paddingHorizontal: 24 }}>
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 18, textAlign: 'center' }}>
-            Scan the buyer's release QR
-          </Text>
-
-          {!granted && permission && (
-            <View style={{ alignItems: 'center' }}>
-              <Text style={{ color: '#fff', textAlign: 'center', marginBottom: 16, fontSize: 15 }}>
-                Camera access is needed to scan the QR — or just enter the 6-digit code instead.
-              </Text>
-              <Button label="Allow camera" onPress={requestPermission} />
+        {granted ? (
+          /* scanning: the live camera IS the content — keep chrome minimal, title up, escape down */
+          <View style={{ flex: 1, justifyContent: 'space-between', alignItems: 'center', paddingTop: 76, paddingBottom: 52, paddingHorizontal: 24 }}>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 18, textAlign: 'center' }}>
+              Scan the buyer's release QR
+            </Text>
+            <Pressable
+              onPress={onClose}
+              style={{ backgroundColor: 'rgba(255,255,255,0.16)', paddingHorizontal: 26, paddingVertical: 12, borderRadius: 24 }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600', textAlign: 'center' }}>Enter the code manually instead</Text>
+            </Pressable>
+          </View>
+        ) : (
+          /* no camera yet: one cohesive, vertically-centered prompt — no stranded voids */
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }}>
+            <View style={{ width: 76, height: 76, borderRadius: 38, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', marginBottom: 22 }}>
+              <Ionicons name="qr-code-outline" size={36} color="#fff" />
             </View>
-          )}
-
-          <Pressable
-            onPress={onClose}
-            style={{ backgroundColor: 'rgba(255,255,255,0.16)', paddingHorizontal: 26, paddingVertical: 12, borderRadius: 24 }}
-          >
-            <Text style={{ color: '#fff', fontWeight: '600', textAlign: 'center' }}>Enter the code manually instead</Text>
-          </Pressable>
-        </View>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 20, textAlign: 'center', marginBottom: 10 }}>
+              Scan the buyer's release QR
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', textAlign: 'center', fontSize: 15, lineHeight: 21, marginBottom: 26 }}>
+              Allow camera access to scan it — or just enter the 6-digit code by hand.
+            </Text>
+            <View style={{ alignSelf: 'stretch' }}>
+              <Button label="Allow camera" onPress={requestPermission} />
+              <Pressable onPress={onClose} style={{ paddingVertical: 14, alignItems: 'center', marginTop: 4 }}>
+                <Text style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '600' }}>Enter the code manually instead</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
       </View>
     </Modal>
   );
