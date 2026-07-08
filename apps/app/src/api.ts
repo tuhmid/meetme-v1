@@ -67,6 +67,7 @@ export interface UserProfile {
 }
 export interface Invite { token: string; inviterName: string; itemDescription: string; amountCents: number; yourRole: Role }
 export interface MeetupSpot { name: string; lat: number; lng: number; category: string; tier: 'verified' | 'public'; minutesBuyer: number | null; minutesSeller: number | null }
+export interface ChatMessage { senderId: string; body: string | null; imageUrl: string | null; createdAt: number }
 
 async function req(method: string, path: string, body?: unknown, auth?: string): Promise<any> {
   const headers: Record<string, string> = {};
@@ -124,8 +125,9 @@ export const api = {
   resolveDispute: (id: string, outcome: 'release' | 'refund' | 'split') =>
     req('POST', `/dev/deals/${id}/resolve`, { outcome }) as Promise<{ ok: boolean; deal?: Deal; error?: string }>,
   listMessages: (auth: string, id: string) =>
-    req('GET', `/deals/${id}/messages`, undefined, auth) as Promise<{ messages: { senderId: string; body: string; createdAt: number }[] }>,
-  sendMessage: (auth: string, id: string, body: string) => req('POST', `/deals/${id}/messages`, { body }, auth) as Promise<{ ok: boolean }>,
+    req('GET', `/deals/${id}/messages`, undefined, auth) as Promise<{ messages: ChatMessage[] }>,
+  sendMessage: (auth: string, id: string, body: string, image?: { base64: string; contentType: string }) =>
+    req('POST', `/deals/${id}/messages`, { body, imageBase64: image?.base64, contentType: image?.contentType }, auth) as Promise<{ ok: boolean }>,
   getUserProfile: (auth: string, id: string) => req('GET', `/users/${id}/profile`, undefined, auth) as Promise<UserProfile>,
   blockUser: (auth: string, id: string) => req('POST', `/users/${id}/block`, {}, auth) as Promise<{ ok: boolean }>,
   reportUser: (auth: string, id: string, reason: string, dealId?: string) => req('POST', `/users/${id}/report`, { reason, dealId }, auth) as Promise<{ ok: boolean }>,

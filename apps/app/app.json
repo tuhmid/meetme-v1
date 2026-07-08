@@ -29,6 +29,12 @@
         {
           "cameraPermission": "MeetMe uses the camera to scan the buyer's release QR at handoff."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MeetMe lets you share photos in a deal's chat to coordinate the handoff."
+        }
       ]
     ]
   }

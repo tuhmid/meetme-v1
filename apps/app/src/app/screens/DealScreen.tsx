@@ -33,7 +33,7 @@ export default function DealScreen() {
     showTrust, setShowTrust, profile, profileOpen, setProfileOpen, profileLoading,
     meetupOpen, setMeetupOpen, comingFrom, setComingFrom, customSpot, setCustomSpot, suggestions, meetupMsg,
     myId, myRole, refresh, pullDeal, loadMessages, bearer,
-    act, rate, sendMessage, cancelDeal, leaveSafely, openDispute, reportOrBlock, theirName,
+    act, rate, sendMessage, attachImage, cancelDeal, leaveSafely, openDispute, reportOrBlock, theirName,
     openProfile, openMeetup, propose, resolveDispute, submitStatement,
     shareFromAddress, chooseMeetup, useCustomSpot, confirmMeetup, reschedule, proposeTime, setProposeTime,
   } = useApp();
@@ -466,15 +466,22 @@ export default function DealScreen() {
                   ) : (
                     messages.map((m, i) => {
                       const mine = m.senderId === myId();
+                      const hasImage = !!m.imageUrl;
                       return (
-                        <Animated.View key={i} entering={reduceMotion ? FadeIn.duration(duration.fast) : FadeInDown.duration(duration.fast)} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', backgroundColor: mine ? theme.colors.primary : theme.colors.surfaceAlt, borderRadius: theme.radius.md, paddingHorizontal: 12, paddingVertical: 7, marginVertical: 3, maxWidth: '82%' }}>
-                          <Text style={{ color: mine ? theme.colors.onPrimary : theme.colors.text }}>{m.body}</Text>
+                        <Animated.View key={i} entering={reduceMotion ? FadeIn.duration(duration.fast) : FadeInDown.duration(duration.fast)} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', backgroundColor: mine ? theme.colors.primary : theme.colors.surfaceAlt, borderRadius: theme.radius.md, padding: hasImage ? 4 : 0, paddingHorizontal: hasImage ? 4 : 12, paddingVertical: hasImage ? 4 : 7, marginVertical: 3, maxWidth: '82%' }}>
+                          {hasImage && (
+                            <Image source={{ uri: m.imageUrl! }} style={{ width: 210, height: 210, borderRadius: theme.radius.sm }} resizeMode="cover" />
+                          )}
+                          {m.body ? <Text style={{ color: mine ? theme.colors.onPrimary : theme.colors.text, paddingHorizontal: hasImage ? 8 : 0, paddingTop: hasImage ? 6 : 0, paddingBottom: hasImage ? 4 : 0 }}>{m.body}</Text> : null}
                         </Animated.View>
                       );
                     })
                   )}
                 </Card>
-                <View style={{ flexDirection: 'row', marginTop: 8 }}>
+                <View style={{ flexDirection: 'row', marginTop: 8, alignItems: 'center' }}>
+                  <Pressable onPress={attachImage} style={{ justifyContent: 'center', paddingHorizontal: 8 }} hitSlop={8}>
+                    <Ionicons name="image-outline" size={24} color={theme.colors.primary} />
+                  </Pressable>
                   <TextInput value={msgInput} onChangeText={setMsgInput} placeholder="Message…" style={[inputStyle(theme), { flex: 1, marginBottom: 0 }]} onSubmitEditing={sendMessage} returnKeyType="send" />
                   <Pressable onPress={sendMessage} style={{ backgroundColor: theme.colors.primary, borderRadius: theme.radius.md, paddingHorizontal: 16, justifyContent: 'center', marginLeft: 8 }} hitSlop={4}>
                     <Ionicons name="send" size={18} color={theme.colors.onPrimary} />

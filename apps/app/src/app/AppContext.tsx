@@ -11,7 +11,8 @@ import { Alert, Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
-import { api, type Action, type Deal, type Invite, type MeetupSpot, type Role, type Transfer, type UserProfile } from '../api';
+import * as ImagePicker from 'expo-image-picker';
+import { api, type Action, type ChatMessage, type Deal, type Invite, type MeetupSpot, type Role, type Transfer, type UserProfile } from '../api';
 import { supabase } from '../supabase';
 import { registerForPush } from '../push';
 import { formatMoney, gentle, phoneValid, stateBanner, toE164 } from './dealLogic';
@@ -47,7 +48,7 @@ function useAppState() {
   const [proposeTime, setProposeTime] = useState<number | null>(null); // selected meetup time; null = ASAP
   const [suggestions, setSuggestions] = useState<MeetupSpot[]>([]);
   const [meetupMsg, setMeetupMsg] = useState('');
-  const [messages, setMessages] = useState<{ senderId: string; body: string; createdAt: number }[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [msgInput, setMsgInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -214,6 +215,18 @@ function useAppState() {
     run(async () => {
       if (!msgInput.trim()) return;
       await api.sendMessage(bearer(), dealId!, msgInput.trim());
+      setMsgInput('');
+      await loadMessages(bearer(), dealId!);
+    });
+  // Attach a photo to the chat (compressed). The current text field rides along as a caption.
+  const attachImage = () =>
+    run(async () => {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) { setErr('Photo access is needed to share an image.'); return; }
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5, base64: true });
+      const asset = res.canceled ? null : res.assets?.[0];
+      if (!asset?.base64) return;
+      await api.sendMessage(bearer(), dealId!, msgInput.trim(), { base64: asset.base64, contentType: asset.mimeType ?? 'image/jpeg' });
       setMsgInput('');
       await loadMessages(bearer(), dealId!);
     });
@@ -573,7 +586,7 @@ function useAppState() {
     bearer, myId, myRole, otherName,
     // handlers
     sendCode, verifyCode, startDemo, logout,
-    loadHome, pollHome, openDeal, loadMessages, sendMessage, newDeal, inviteSomeone,
+    loadHome, pollHome, openDeal, loadMessages, sendMessage, attachImage, newDeal, inviteSomeone,
     acceptInvite, declineInvite, deleteDraft, cancelDeal, propose,
     openMeetup, shareFromAddress, chooseMeetup, useCustomSpot, proposeMeetup, confirmMeetup, reschedule,
     refresh, pullDeal, act, rate,
