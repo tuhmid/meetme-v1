@@ -37,7 +37,7 @@ export interface ServerDeps {
 const BEARER = 'Bearer ';
 
 export function buildServer(deps: ServerDeps): FastifyInstance {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, bodyLimit: 14 * 1024 * 1024 }); // headroom for base64 image uploads
   const push = deps.push ?? NoopPushSender;
 
   // Auth: a real Supabase JWT (`Bearer <jwt>` -> verifyToken) OR, when allowDev,
@@ -325,27 +325,45 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const rec = await deps.repo.getDeal(id);
     if (!rec) return reply.code(404).send({ error: 'not found' });
     if (rec.deal.buyerId !== uid && rec.deal.sellerId !== uid) return reply.code(403).send({ error: 'not a participant' });
-    return { messages: await deps.repo.listMessages(id) };
+    const msgs = await deps.repo.listMessages(id);
+    // mint a short-lived signed URL per image; never expose the raw storage path
+    const messages = await Promise.all(msgs.map(async (m) => ({
+      senderId: m.senderId,
+      body: m.body,
+      createdAt: m.createdAt,
+      imageUrl: m.imagePath ? await deps.repo.signImageUrl(m.imagePath) : null,
+    })));
+    return { messages };
   });
 
   app.post('/deals/:id/messages', async (req, reply) => {
     const uid = await resolveCaller(req);
     if (!uid) return reply.code(401).send({ error: 'auth required' });
     const id = (req.params as { id: string }).id;
-    const body = ((req.body as { body?: string })?.body ?? '').trim();
-    if (!body) return reply.code(400).send({ error: 'message body required' });
+    const { body: rawBody, imageBase64, contentType } = (req.body ?? {}) as { body?: string; imageBase64?: string; contentType?: string };
+    const body = (rawBody ?? '').trim();
+    if (!body && !imageBase64) return reply.code(400).send({ error: 'message body or image required' });
     const rec = await deps.repo.getDeal(id);
     if (!rec) return reply.code(404).send({ error: 'not found' });
     if (rec.deal.buyerId !== uid && rec.deal.sellerId !== uid) return reply.code(403).send({ error: 'not a participant' });
     // a block mutes the channel both ways (history stays readable via GET)
     const other = rec.deal.buyerId === uid ? rec.deal.sellerId : rec.deal.buyerId;
     if (await deps.repo.isBlocked(uid, other)) return reply.code(403).send({ error: 'Messaging is unavailable for this deal.', code: 'blocked' });
-    await deps.repo.addMessage(id, uid, body.slice(0, 1000));
+    let imagePath: string | null = null;
+    if (imageBase64) {
+      const ct = typeof contentType === 'string' && /^image\/(jpeg|png|webp)$/.test(contentType) ? contentType : 'image/jpeg';
+      const bytes = Buffer.from(imageBase64, 'base64');
+      if (bytes.length === 0) return reply.code(400).send({ error: 'invalid image' });
+      if (bytes.length > 10 * 1024 * 1024) return reply.code(413).send({ error: 'image too large (max 10MB)' });
+      imagePath = await deps.repo.putDealImage(id, bytes, ct);
+    }
+    await deps.repo.addMessage(id, uid, body ? body.slice(0, 1000) : null, imagePath);
     // best-effort push to the other party
     const otherId = rec.deal.buyerId === uid ? rec.deal.sellerId : rec.deal.buyerId;
     const sender = await deps.repo.getUser(uid);
     const tokens = await deps.repo.getPushTokens(otherId);
-    if (tokens.length) void push.send(tokens, { title: sender?.name ?? 'New message', body: body.slice(0, 120), data: { dealId: id } });
+    const preview = body ? body.slice(0, 120) : '📷 Photo';
+    if (tokens.length) void push.send(tokens, { title: sender?.name ?? 'New message', body: preview, data: { dealId: id } });
     return { ok: true };
   });
 

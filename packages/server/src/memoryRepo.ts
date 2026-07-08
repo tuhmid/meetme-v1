@@ -154,12 +154,22 @@ export class MemoryRepo implements Repo {
     if (r) r.deal.sellerHoldId = holdId;
   }
 
-  messages: Array<{ dealId: string; senderId: string; body: string; createdAt: number }> = [];
-  async addMessage(dealId: string, senderId: string, body: string): Promise<void> {
-    this.messages.push({ dealId, senderId, body, createdAt: this.clock() });
+  messages: Array<{ dealId: string; senderId: string; body: string | null; imagePath: string | null; createdAt: number }> = [];
+  private images = new Map<string, { bytes: Uint8Array; contentType: string }>();
+  private imageSeq = 0;
+  async addMessage(dealId: string, senderId: string, body: string | null, imagePath: string | null = null): Promise<void> {
+    this.messages.push({ dealId, senderId, body, imagePath, createdAt: this.clock() });
   }
-  async listMessages(dealId: string): Promise<{ senderId: string; body: string; createdAt: number }[]> {
-    return this.messages.filter((m) => m.dealId === dealId).map((m) => ({ senderId: m.senderId, body: m.body, createdAt: m.createdAt }));
+  async listMessages(dealId: string): Promise<{ senderId: string; body: string | null; imagePath: string | null; createdAt: number }[]> {
+    return this.messages.filter((m) => m.dealId === dealId).map((m) => ({ senderId: m.senderId, body: m.body, imagePath: m.imagePath, createdAt: m.createdAt }));
+  }
+  async putDealImage(dealId: string, bytes: Uint8Array, contentType: string): Promise<string> {
+    const path = `${dealId}/${this.imageSeq++}.jpg`;
+    this.images.set(path, { bytes, contentType });
+    return path;
+  }
+  async signImageUrl(path: string): Promise<string | null> {
+    return this.images.has(path) ? `mem://deal-media/${path}` : null;
   }
 
   blocks: Array<{ blockerId: string; blockedId: string }> = [];

@@ -313,6 +313,29 @@ describe('M3 API — drives a full deal over HTTP (the walking skeleton spine)',
     expect((await post(`/deals/${dealId}/messages`, { body: 'hi' }, stranger)).statusCode).toBe(403);
   });
 
+  it('chat: an image message round-trips with a signed URL; empty is rejected', async () => {
+    const app = buildServer({ repo: new MemoryRepo(), rail: new FakeRail({ instantSettle: true }), makeCtx: () => makeServerCtx(), allowDev: true });
+    const post = (url: string, payload: object, uid?: string): Promise<any> =>
+      app.inject({ method: 'POST', url, payload, headers: uid ? { authorization: `Bearer dev:${uid}` } : {} }) as Promise<any>;
+    const get = (url: string, uid: string): Promise<any> => app.inject({ method: 'GET', url, headers: { authorization: `Bearer dev:${uid}` } }) as Promise<any>;
+    const maya = (await post('/signup', { phone: '+15551110000', name: 'Maya' })).json().userId as string;
+    const sam = (await post('/signup', { phone: '+15552220000', name: 'Sam' })).json().userId as string;
+    const dealId = (await post('/deals', { counterpartyUserId: sam, itemDescription: 'x', amountCents: 100_00 }, maya)).json().dealId as string;
+
+    const b64 = 'aGVsbG8='; // any non-empty bytes stand in for image data
+    expect((await post(`/deals/${dealId}/messages`, { imageBase64: b64, contentType: 'image/png' }, maya)).statusCode).toBe(200); // image-only
+    expect((await post(`/deals/${dealId}/messages`, { body: 'here it is', imageBase64: b64 }, sam)).statusCode).toBe(200); // text + image
+
+    const msgs = (await get(`/deals/${dealId}/messages`, sam)).json().messages;
+    expect(msgs.length).toBe(2);
+    expect(msgs[0].body).toBeNull();
+    expect(typeof msgs[0].imageUrl).toBe('string'); // signed URL minted
+    expect(msgs[1].body).toBe('here it is');
+    expect(msgs[1].imageUrl).toBeTruthy();
+
+    expect((await post(`/deals/${dealId}/messages`, {}, maya)).statusCode).toBe(400); // no body, no image
+  });
+
   it('geofence: two location pings coming together auto-arrive both parties (EN_ROUTE -> AT_MEETUP)', async () => {
     const app = buildServer({
       repo: new MemoryRepo(),

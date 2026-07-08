@@ -128,8 +128,10 @@ export interface Repo {
   setSellerHold(dealId: string, holdId: string | null): Promise<void>;
 
   // chat
-  addMessage(dealId: string, senderId: string, body: string): Promise<void>;
-  listMessages(dealId: string): Promise<{ senderId: string; body: string; createdAt: number }[]>;
+  addMessage(dealId: string, senderId: string, body: string | null, imagePath?: string | null): Promise<void>;
+  listMessages(dealId: string): Promise<{ senderId: string; body: string | null; imagePath: string | null; createdAt: number }[]>;
+  putDealImage(dealId: string, bytes: Uint8Array, contentType: string): Promise<string>; // returns the stored path
+  signImageUrl(path: string): Promise<string | null>; // short-lived signed URL for a stored image
 
   // safety: block + report
   blockUser(blockerId: string, blockedId: string): Promise<void>;

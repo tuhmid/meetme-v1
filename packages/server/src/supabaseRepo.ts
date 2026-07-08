@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { ALLOWED_TRANSITIONS, isTerminal, type Deal, type DealState } from '@meetme/core';
 import { ConflictError, type DealRecord, type InviteRow, type LocationPing, type PushTokenRow, type Repo, type TransferRow, type TransitionWrite, type UserRow } from './repo';
@@ -288,14 +289,26 @@ export function makeSupabaseRepo(url: string, serviceRoleKey: string): Repo {
       if (error) throw error;
     },
 
-    async addMessage(dealId: string, senderId: string, body: string): Promise<void> {
-      const { error } = await db.from('messages').insert({ deal_id: dealId, sender_id: senderId, body });
+    async addMessage(dealId: string, senderId: string, body: string | null, imagePath: string | null = null): Promise<void> {
+      const { error } = await db.from('messages').insert({ deal_id: dealId, sender_id: senderId, body, image_path: imagePath });
       if (error) throw error;
     },
-    async listMessages(dealId: string): Promise<{ senderId: string; body: string; createdAt: number }[]> {
-      const { data, error } = await db.from('messages').select('sender_id, body, created_at').eq('deal_id', dealId).order('created_at', { ascending: true });
+    async listMessages(dealId: string): Promise<{ senderId: string; body: string | null; imagePath: string | null; createdAt: number }[]> {
+      const { data, error } = await db.from('messages').select('sender_id, body, image_path, created_at').eq('deal_id', dealId).order('created_at', { ascending: true });
       if (error) throw error;
-      return (data ?? []).map((m: any) => ({ senderId: m.sender_id, body: m.body, createdAt: Date.parse(m.created_at) }));
+      return (data ?? []).map((m: any) => ({ senderId: m.sender_id, body: m.body ?? null, imagePath: m.image_path ?? null, createdAt: Date.parse(m.created_at) }));
+    },
+    async putDealImage(dealId: string, bytes: Uint8Array, contentType: string): Promise<string> {
+      const ext = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
+      const path = `${dealId}/${randomUUID()}.${ext}`;
+      const { error } = await db.storage.from('deal-media').upload(path, bytes, { contentType, upsert: false });
+      if (error) throw error;
+      return path;
+    },
+    async signImageUrl(path: string): Promise<string | null> {
+      const { data, error } = await db.storage.from('deal-media').createSignedUrl(path, 3600); // 1h
+      if (error) return null;
+      return data?.signedUrl ?? null;
     },
 
     async blockUser(blockerId: string, blockedId: string): Promise<void> {
