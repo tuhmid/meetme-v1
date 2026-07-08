@@ -13,7 +13,7 @@ import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { api, type Action, type ChatMessage, type Deal, type Invite, type MeetupSpot, type Role, type Transfer, type UserProfile } from '../api';
-import { supabase } from '../supabase';
+import { supabase, SUPABASE_URL } from '../supabase';
 import { registerForPush } from '../push';
 import { formatMoney, gentle, phoneValid, stateBanner, toE164 } from './dealLogic';
 import { goDeal, goHome } from './nav';
@@ -210,7 +210,16 @@ function useAppState() {
       if (session) setInvites((await api.listInvites(session.accessToken)).invites);
     });
   const openDeal = (id: string) => { lastState.current = null; setBanner(''); setGeo(null); setCode(''); setMessages([]); setMsgInput(''); setDealId(id); goDeal(); };
-  const loadMessages = async (auth: string, id: string) => { try { setMessages((await api.listMessages(auth, id)).messages); } catch { /* transient */ } };
+  // Signed image URLs are minted by the API's Supabase host (often localhost, which a
+  // phone can't reach) — rewrite the origin to the host the app actually talks to.
+  const reachableImage = (url: string | null): string | null =>
+    url ? url.replace(/^https?:\/\/[^/]+/, SUPABASE_URL.replace(/\/$/, '')) : url;
+  const loadMessages = async (auth: string, id: string) => {
+    try {
+      const { messages } = await api.listMessages(auth, id);
+      setMessages(messages.map((m) => ({ ...m, imageUrl: reachableImage(m.imageUrl) })));
+    } catch { /* transient */ }
+  };
   const sendMessage = () =>
     run(async () => {
       if (!msgInput.trim()) return;

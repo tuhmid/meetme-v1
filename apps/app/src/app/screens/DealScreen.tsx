@@ -11,6 +11,7 @@ import { supabase } from '../../supabase';
 import { useTheme } from '../../theme';
 import { Badge, Button, Callout, Card, DealCard, MeetupField, PresenceCard, RatingStars, SectionLabel, Stepper, TrustBanner } from '../../ui';
 import { QrScanner } from '../../ui/QrScanner'; // imported directly (keeps native expo-camera out of the ui barrel)
+import { ChatModal } from '../ChatModal';
 import { useApp } from '../AppContext';
 import { MeetupTimePicker, ProfileModal, RoleBar, RolePick, SpringSheet, TrustModal } from '../components';
 import { countdownTo, describeTransfer, ESCROW_STATES, formatMeetupTime, formatMoney, iconFor, inputStyle, labelFor, nextActions, outcomeFor, presenceStatus, STEP_INDEX, turnGuidance } from '../dealLogic';
@@ -20,6 +21,7 @@ export default function DealScreen() {
   const navigation = useNavigation();
   const reduceMotion = useReducedMotion();
   const [scanOpen, setScanOpen] = useState(false); // QR scanner modal (seller side)
+  const [chatOpen, setChatOpen] = useState(false); // full-screen chat
   const { duration, spring } = theme.motion;
   // staggered section entrance; plain fade when the user prefers reduced motion
   const enterSection = (i: number) =>
@@ -456,34 +458,18 @@ export default function DealScreen() {
 
             {['AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(deal.state) && (
               <Animated.View entering={enterSection(9)} style={{ marginTop: 20 }}>
-                <SectionLabel>Chat</SectionLabel>
-                <Card padded={false} style={{ padding: 10 }}>
-                  {messages.length === 0 ? (
-                    <Text style={{ color: theme.colors.textMuted, padding: 6 }}>No messages yet — coordinate your meetup here.</Text>
-                  ) : (
-                    messages.map((m, i) => {
-                      const mine = m.senderId === myId();
-                      const hasImage = !!m.imageUrl;
-                      return (
-                        <Animated.View key={i} entering={reduceMotion ? FadeIn.duration(duration.fast) : FadeInDown.duration(duration.fast)} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', backgroundColor: mine ? theme.colors.primary : theme.colors.surfaceAlt, borderRadius: theme.radius.md, padding: hasImage ? 4 : 0, paddingHorizontal: hasImage ? 4 : 12, paddingVertical: hasImage ? 4 : 7, marginVertical: 3, maxWidth: '82%' }}>
-                          {hasImage && (
-                            <Image source={{ uri: m.imageUrl! }} style={{ width: 210, height: 210, borderRadius: theme.radius.sm }} resizeMode="cover" />
-                          )}
-                          {m.body ? <Text style={{ color: mine ? theme.colors.onPrimary : theme.colors.text, paddingHorizontal: hasImage ? 8 : 0, paddingTop: hasImage ? 6 : 0, paddingBottom: hasImage ? 4 : 0 }}>{m.body}</Text> : null}
-                        </Animated.View>
-                      );
-                    })
-                  )}
-                </Card>
-                <View style={{ flexDirection: 'row', marginTop: 8, alignItems: 'center' }}>
-                  <Pressable onPress={attachImage} style={{ justifyContent: 'center', paddingHorizontal: 8 }} hitSlop={8}>
-                    <Ionicons name="image-outline" size={24} color={theme.colors.primary} />
-                  </Pressable>
-                  <TextInput value={msgInput} onChangeText={setMsgInput} placeholder="Message…" placeholderTextColor={theme.colors.textMuted} style={[inputStyle(theme), { flex: 1, marginBottom: 0 }]} onSubmitEditing={sendMessage} returnKeyType="send" />
-                  <Pressable onPress={sendMessage} style={{ backgroundColor: theme.colors.primary, borderRadius: theme.radius.md, paddingHorizontal: 16, justifyContent: 'center', marginLeft: 8 }} hitSlop={4}>
-                    <Ionicons name="send" size={18} color={theme.colors.onPrimary} />
-                  </Pressable>
-                </View>
+                <Pressable onPress={() => setChatOpen(true)}>
+                  <Card style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={22} color={theme.colors.primary} />
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={{ fontWeight: '700', color: theme.colors.text }}>Chat with {oFirst}</Text>
+                      <Text style={{ color: theme.colors.textDim, fontSize: 13 }} numberOfLines={1}>
+                        {messages.length === 0 ? 'Coordinate your meetup' : (messages[messages.length - 1].body ?? '📷 Photo')}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                  </Card>
+                </Pressable>
               </Animated.View>
             )}
 
@@ -592,6 +578,18 @@ export default function DealScreen() {
         visible={scanOpen}
         onClose={() => setScanOpen(false)}
         onScan={(scanned) => { setScanOpen(false); setCode(scanned); }} // effect submits once code is set
+      />
+
+      <ChatModal
+        visible={chatOpen}
+        onClose={() => setChatOpen(false)}
+        title={`Chat with ${theirName()}`}
+        messages={messages}
+        myId={myId()}
+        input={msgInput}
+        setInput={setMsgInput}
+        onSend={sendMessage}
+        onAttach={attachImage}
       />
     </SafeAreaView>
   );

@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 // flows through the API. On a physical phone, point these at your Mac's LAN IP,
 // e.g. EXPO_PUBLIC_SUPABASE_URL=http://192.168.0.13:54321.
 const URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'http://localhost:54321';
+export const SUPABASE_URL = URL; // the host the APP can reach (LAN IP on a device)
 // True when pointed at a local/LAN Supabase — used to surface dev-only test-login helpers.
 export const IS_LOCAL_SUPABASE = /localhost|127\.0\.0\.1|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\./.test(URL);
 // Well-known LOCAL-dev anon key (identical across every local Supabase; safe to
