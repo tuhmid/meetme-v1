@@ -316,15 +316,19 @@ function useAppState() {
 
   const deleteDraft = (id: string) => run(async () => { await api.deleteDeal(bearer(), id); await loadHome(); });
 
-  // back out of a deal — free before heading out, forfeits your deposit after
+  // back out of a deal — free unless the OTHER side already committed to travel (headed out),
+  // in which case backing out forfeits your deposit to them. Matches the machine's CANCEL rule.
   const cancelDeal = () => {
-    const enRoute = deal!.state === 'EN_ROUTE';
+    const otherHeadedOut = myRole(deal!) === 'buyer' ? deal!.sellerHeadedOut : deal!.buyerHeadedOut;
+    const forfeit = deal!.state === 'EN_ROUTE' && otherHeadedOut;
     Alert.alert(
-      enRoute ? 'Back out?' : 'Cancel deal?',
-      enRoute ? `You already headed out — backing out now forfeits your ${formatMoney(deal!.commitmentCents)} deposit to the other person.` : 'You can back out for a full refund before anyone heads out.',
+      forfeit ? 'Back out?' : 'Cancel deal?',
+      forfeit
+        ? `The other person already headed out — backing out now forfeits your ${formatMoney(deal!.commitmentCents)} deposit to them.`
+        : 'You can back out for a full refund — nothing is forfeited.',
       [
         { text: 'Keep deal', style: 'cancel' },
-        { text: enRoute ? 'Back out' : 'Cancel deal', style: 'destructive', onPress: () => act({ type: 'CANCEL', actor: myRole(deal!) }) },
+        { text: forfeit ? 'Back out' : 'Cancel deal', style: 'destructive', onPress: () => act({ type: 'CANCEL', actor: myRole(deal!) }) },
       ]
     );
   };

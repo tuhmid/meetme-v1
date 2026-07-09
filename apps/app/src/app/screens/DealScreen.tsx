@@ -628,7 +628,7 @@ export default function DealScreen() {
                 {['AGREED', 'ARMED', 'EN_ROUTE', 'AT_MEETUP', 'CONFIRMING', 'DISPUTED'].includes(st) &&
                   row('block', 'flag', `Report or block ${theirName()}`, 'Stop messages and flag this person to MeetMe.', reportOrBlock)}
                 {['DRAFT', 'AGREED', 'ARMED', 'EN_ROUTE'].includes(st) &&
-                  row('cancel', 'close-circle', 'Cancel deal', st === 'EN_ROUTE' ? `Backing out now forfeits your ${formatMoney(deal.commitmentCents)} deposit.` : 'Everything funded comes back in full.', cancelDeal, true)}
+                  row('cancel', 'close-circle', 'Cancel deal', (st === 'EN_ROUTE' && (myRole(deal) === 'buyer' ? deal.sellerHeadedOut : deal.buyerHeadedOut)) ? `Backing out now forfeits your ${formatMoney(deal.commitmentCents)} deposit.` : 'You get a full refund — nothing forfeited.', cancelDeal, true)}
               </>
             );
           })()}

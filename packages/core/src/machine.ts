@@ -380,7 +380,9 @@ export function applyAction(deal: Deal, action: Action, ctx: Ctx): ApplyResult {
     case 'CANCEL': {
       // Before anyone heads out, backing out is FREE and fully refunded — plans change.
       if (deal.state === 'DRAFT' || deal.state === 'AGREED') {
-        return transition(deal, 'CANCELLED', ev(ctx, action.actor, 'cancelled', `${action.actor} cancelled the deal.`));
+        return transition(deal, 'CANCELLED', ev(ctx, action.actor, 'cancelled', `${action.actor} cancelled the deal.`), {
+          effects: holdRelease(deal), // a confirmed SCHEDULED meetup can place the hold pre-funding — let it go
+        });
       }
       if (deal.state === 'FUNDED' || deal.state === 'ARMED') {
         return transition(deal, 'REFUNDED', ev(ctx, action.actor, 'cancelled', `${action.actor} cancelled before heading out — everyone refunded in full.`), {

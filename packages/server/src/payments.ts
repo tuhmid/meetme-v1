@@ -20,6 +20,12 @@ function releasesToSeller(action: Action, deal: Deal): boolean {
   if (action.type === 'CONFIRM_RECEIVED' || action.type === 'AUTO_RELEASE') return true;
   if (action.type === 'RESOLVE_DISPUTE') return paysSeller(action.outcome);
   if (action.type === 'PROPOSE_RESOLUTION') return paysSeller(action.outcome) && deal.disputeProposals[otherRole(action.actor)] === action.outcome;
+  // A buyer no-show (or a buyer forfeiting by cancelling after both headed out) pays the
+  // seller their stood-up compensation OUT OF the buyer's escrowed deposit — the same
+  // escrow a dispute-split is gated on. Gate these too. (Seller-fault / mutual endings pay
+  // the seller nothing from escrow, so they stay ungated.)
+  if (action.type === 'EXPIRE_NO_SHOW') return action.noShow === 'buyer';
+  if (action.type === 'CANCEL') return deal.state === 'EN_ROUTE' && action.actor === 'buyer' && deal.sellerHeadedOut;
   return false;
 }
 

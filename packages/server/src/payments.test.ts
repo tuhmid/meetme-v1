@@ -177,6 +177,32 @@ describe('M2 return safety', () => {
   });
 });
 
+describe('buyer-fault no-show respects the settlement gate', () => {
+  it('a buyer no-show does NOT pay the seller from unsettled (ACH) escrow, then does once settled', async () => {
+    const { repo, ctx, buyer, seller, dealId } = await setup();
+    const rail = new FakeRail({ fundingRail: 'ach' }); // pending, does not settle on its own
+    const exec = (id: string, a: Action) => executeAction(repo, rail, { dealId, action: a, callerUserId: id, channel: 'user' }, ctx);
+    ok(await exec(seller.id, { type: 'ACCEPT_TERMS' }));
+    ok(await exec(buyer.id, { type: 'FUND' }));
+    ok(await exec(buyer.id, { type: 'HEAD_OUT', actor: 'buyer' }));
+    ok(await exec(seller.id, { type: 'HEAD_OUT', actor: 'seller' }));
+    ok(await exec(seller.id, { type: 'ARRIVE', party: 'seller' }));
+
+    // the seller's stood-up comp comes from the buyer's escrow, which is still pending —
+    // the gate must block it, or MeetMe pays out money it may never collect (ACH can return).
+    const sys = (a: Action) => executeAction(repo, rail, { dealId, action: a, callerUserId: null, channel: 'system' }, ctx);
+    const blocked = await sys({ type: 'EXPIRE_NO_SHOW', noShow: 'buyer' });
+    expect(!blocked.ok && blocked.code).toBe('funding_not_settled');
+    expect((await repo.getDeal(dealId))!.deal.state).toBe('EN_ROUTE'); // not resolved
+    expect((await repo.listTransfers(dealId)).some((t) => t.direction === 'payout_seller')).toBe(false); // no loss
+
+    await markFundingSettled(repo, dealId);
+    ok(await sys({ type: 'EXPIRE_NO_SHOW', noShow: 'buyer' }));
+    expect((await repo.getDeal(dealId))!.deal.state).toBe('EXPIRED_NO_SHOW');
+    expect((await repo.listTransfers(dealId)).some((t) => t.direction === 'payout_seller')).toBe(true);
+  });
+});
+
 describe('dispute resolution disburses on the rail', () => {
   async function toDisputed() {
     const s = await setup();

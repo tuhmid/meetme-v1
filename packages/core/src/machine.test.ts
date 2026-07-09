@@ -156,6 +156,24 @@ describe('meetup arrangement (propose → confirm)', () => {
     expect(confirmed.effects).toContainEqual({ type: 'hold_seller_commitment', sellerId: 'sam', amountCents: 15_00 });
   });
 
+  it('cancelling a SCHEDULED deal before funding releases the seller hold (no orphan)', () => {
+    const ctx = makeCtx();
+    // a scheduled meetup can be confirmed while still AGREED (unfunded) — that places a card hold
+    const agreed = drive(newDeal(300_00), ctx, [{ type: 'ACCEPT_TERMS' }]).deal;
+    const proposed = applyAction(agreed, { type: 'PROPOSE_MEETUP', actor: 'seller', name: 'Precinct', lat: 1, lng: 2, custom: false, time: 1_700_000_900_000 }, ctx);
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+    const confirmed = applyAction(proposed.deal, { type: 'CONFIRM_MEETUP', actor: 'buyer' }, ctx);
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) return;
+    expect(confirmed.effects).toContainEqual({ type: 'hold_seller_commitment', sellerId: 'sam', amountCents: 15_00 });
+    // cancelling from AGREED must LET GO of that hold — not leave it stuck on the seller's card
+    const cancelled = applyAction(confirmed.deal, { type: 'CANCEL', actor: 'buyer' }, ctx);
+    expect(cancelled.ok && cancelled.deal.state).toBe('CANCELLED');
+    if (!cancelled.ok) return;
+    expect(cancelled.effects).toContainEqual({ type: 'release_seller_hold' });
+  });
+
   it('rescheduling (a new proposal) re-opens confirmation', () => {
     const ctx = makeCtx();
     const p1 = applyAction(armed(), { type: 'PROPOSE_MEETUP', actor: 'buyer', name: 'A', lat: 1, lng: 2, custom: false, time: null }, ctx);
