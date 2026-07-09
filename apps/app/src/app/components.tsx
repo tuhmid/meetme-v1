@@ -1,6 +1,6 @@
 // Small shared pieces that predate the UI kit — used by the Home and Deal screens.
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
@@ -226,7 +226,17 @@ export function SpringSheet({ visible, onClose, children }: { visible: boolean; 
   const theme = useTheme();
   const progress = useSharedValue(0);
   const dragY = useSharedValue(0); // live downward drag on the grab handle
+  const keyboardH = useSharedValue(0); // lift the sheet above the keyboard so inputs stay visible
   const [mounted, setMounted] = useState(visible);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, (e) => { keyboardH.value = withTiming(e.endCoordinates.height, { duration: 240 }); });
+    const hide = Keyboard.addListener(hideEvt, () => { keyboardH.value = withTiming(0, { duration: 200 }); });
+    return () => { show.remove(); hide.remove(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -253,7 +263,7 @@ export function SpringSheet({ visible, onClose, children }: { visible: boolean; 
     });
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value * 0.45 }));
-  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - progress.value) * 620 + dragY.value }] }));
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - progress.value) * 620 + dragY.value - keyboardH.value }] }));
 
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>

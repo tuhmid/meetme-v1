@@ -3,7 +3,7 @@
 // exact seam a real Stripe Elements / SetupIntent swaps into; no money moves here.
 // Uses the app-wide SpringSheet so its open/close matches every other sheet.
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { ScrollView, Text, TextInput, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Button } from '../ui';
 import { SpringSheet } from './components';
@@ -40,8 +40,7 @@ export function CardFormModal({ visible, onClose, onSubmit, busy }: CardFormModa
 
   return (
     <SpringSheet visible={visible} onClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 2, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 2, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
           <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.text, marginBottom: 4 }}>Add a card</Text>
           <Text style={{ color: theme.colors.textDim, fontSize: 13, marginBottom: 16 }}>
             A refundable hold backs each meetup — only captured if you don't show. Test mode: no real charge.
@@ -81,8 +80,7 @@ export function CardFormModal({ visible, onClose, onSubmit, busy }: CardFormModa
           <Text style={{ color: theme.colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: 10 }}>
             Only the last 4 digits are stored. No real payment is set up in test mode.
           </Text>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </ScrollView>
     </SpringSheet>
   );
 }
