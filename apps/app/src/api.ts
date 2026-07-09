@@ -131,7 +131,7 @@ export const api = {
   getUserProfile: (auth: string, id: string) => req('GET', `/users/${id}/profile`, undefined, auth) as Promise<UserProfile>,
   blockUser: (auth: string, id: string) => req('POST', `/users/${id}/block`, {}, auth) as Promise<{ ok: boolean }>,
   reportUser: (auth: string, id: string, reason: string, dealId?: string) => req('POST', `/users/${id}/report`, { reason, dealId }, auth) as Promise<{ ok: boolean }>,
-  addPaymentMethod: (auth: string) => req('POST', '/payment-method', {}, auth) as Promise<{ ok: boolean; last4: string }>,
+  addPaymentMethod: (auth: string, last4: string) => req('POST', '/payment-method', { last4 }, auth) as Promise<{ ok: boolean; last4: string }>,
   listBlocked: (auth: string) => req('GET', '/blocks', undefined, auth) as Promise<{ blocked: { id: string; name: string }[] }>,
   unblock: (auth: string, id: string) => req('DELETE', `/users/${id}/block`, undefined, auth) as Promise<{ ok: boolean }>,
 };

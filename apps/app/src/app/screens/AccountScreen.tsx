@@ -19,7 +19,7 @@ export default function AccountScreen() {
   // staggered section entrance; plain fade when the user prefers reduced motion
   const enterSection = (i: number) =>
     reduceMotion ? FadeIn.duration(duration.base).delay(i * 45) : FadeInDown.duration(duration.base).delay(i * 45);
-  const { session, demo, viewAs, logout, bearer, myId, phone } = useApp();
+  const { session, demo, viewAs, logout, bearer, myId, phone, openCardForm, openIdVerify } = useApp();
 
   const [me, setMe] = useState<UserProfile | null>(null);
   const [blocked, setBlocked] = useState<{ id: string; name: string }[]>([]);
@@ -64,8 +64,8 @@ export default function AccountScreen() {
     });
   };
 
-  const addCard = () => doAction(async () => { await api.addPaymentMethod(bearer()); });
-  const verifyId = () => doAction(async () => { await api.verifyKyc(bearer()); });
+  const addCard = () => openCardForm(loadAccount); // real card form; refresh Account on success
+  const verifyId = () => openIdVerify(loadAccount); // real ID-capture flow; refresh on success
   const unblock = (u: { id: string; name: string }) =>
     Alert.alert(`Unblock ${u.name}?`, 'They will be able to start deals and invites with you again.', [
       { text: 'Cancel', style: 'cancel' },
@@ -147,13 +147,13 @@ export default function AccountScreen() {
             {me?.hasCardOnFile ? (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Ionicons name="card" size={20} color={theme.colors.primary} />
-                <Text style={{ flex: 1, marginLeft: 10, color: theme.colors.text, fontWeight: '600' }}>Visa •••• {me.cardLast4 ?? '4242'}</Text>
+                <Text style={{ flex: 1, marginLeft: 10, color: theme.colors.text, fontWeight: '600' }}>Card •••• {me.cardLast4 ?? '••••'}</Text>
                 <Badge label="On file" tone="success" iconName="checkmark-circle" />
               </View>
             ) : (
-              <Button label="Add card" iconName="card" loading={busy} onPress={addCard} />
+              <Button label="Add card" iconName="card" onPress={addCard} />
             )}
-            <Text style={caption}>Only ever charged if you no-show. Test mode — a fake Visa is used; no real money moves.</Text>
+            <Text style={caption}>Only ever charged if you no-show. Test mode — no real charge; only the last 4 is stored.</Text>
           </Card>
         </Animated.View>
 
@@ -167,7 +167,7 @@ export default function AccountScreen() {
                 <Ionicons name="id-card-outline" size={20} color={theme.colors.textDim} />
                 <Text style={{ flex: 1, marginLeft: 10, color: theme.colors.textDim }}>Not verified</Text>
                 <View style={{ flexShrink: 0 }}>
-                  <Button variant="secondary" label="Verify ID (demo)" loading={busy} onPress={verifyId} style={{ paddingHorizontal: 14 }} />
+                  <Button variant="secondary" label="Verify ID" loading={busy} onPress={verifyId} style={{ paddingHorizontal: 14 }} />
                 </View>
               </View>
             )}

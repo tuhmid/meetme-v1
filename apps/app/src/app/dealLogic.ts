@@ -272,3 +272,69 @@ export function countdownTo(t: number, now: number = Date.now()): string {
   if (diff < 60_000) return 'now';
   return `in ${span}`;
 }
+
+// ---- card entry (TEST MODE — only the last 4 ever leaves this device) ----
+const cardDigits = (v: string): string => v.replace(/\D/g, '');
+
+/** Brand + its length rules, from the card-number prefix. Drives formatting + validation. */
+export function detectCardBrand(num: string): { brand: string; maxDigits: number; cvcLen: number } {
+  const d = cardDigits(num);
+  if (/^4/.test(d)) return { brand: 'Visa', maxDigits: 16, cvcLen: 3 };
+  if (/^(5[1-5]|2[2-7])/.test(d)) return { brand: 'Mastercard', maxDigits: 16, cvcLen: 3 };
+  if (/^3[47]/.test(d)) return { brand: 'Amex', maxDigits: 15, cvcLen: 4 };
+  if (/^6(011|5)/.test(d)) return { brand: 'Discover', maxDigits: 16, cvcLen: 3 };
+  return { brand: 'Card', maxDigits: 16, cvcLen: 3 };
+}
+
+/** Group digits the way the brand prints them (Amex 4-6-5, everyone else 4-4-4-4). */
+export function formatCardNumber(v: string): string {
+  const { brand, maxDigits } = detectCardBrand(v);
+  const d = cardDigits(v).slice(0, maxDigits);
+  if (brand === 'Amex') return [d.slice(0, 4), d.slice(4, 10), d.slice(10, 15)].filter(Boolean).join(' ');
+  return d.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+}
+
+export function luhnValid(num: string): boolean {
+  const d = cardDigits(num);
+  if (d.length < 13) return false;
+  let sum = 0;
+  let dbl = false;
+  for (let i = d.length - 1; i >= 0; i--) {
+    let n = parseInt(d[i], 10);
+    if (dbl) { n *= 2; if (n > 9) n -= 9; }
+    sum += n;
+    dbl = !dbl;
+  }
+  return sum % 10 === 0;
+}
+
+export const formatCardExpiry = (v: string): string => {
+  const d = v.replace(/\D/g, '').slice(0, 4);
+  return d.length <= 2 ? d : `${d.slice(0, 2)}/${d.slice(2)}`;
+};
+
+export function cardExpiryValid(v: string): boolean {
+  const m = /^(\d{2})\/(\d{2})$/.exec(v);
+  if (!m) return false;
+  const mm = parseInt(m[1], 10);
+  const yy = parseInt(m[2], 10);
+  if (mm < 1 || mm > 12) return false;
+  const now = new Date();
+  const curYy = now.getFullYear() % 100;
+  const curMm = now.getMonth() + 1;
+  return yy > curYy || (yy === curYy && mm >= curMm);
+}
+
+export const cardLast4 = (num: string): string => cardDigits(num).slice(-4);
+
+/** All fields present + valid — gates the "Add card" button. */
+export function cardFormValid(num: string, expiry: string, cvc: string, zip: string): boolean {
+  const { maxDigits, cvcLen } = detectCardBrand(num);
+  return (
+    cardDigits(num).length === maxDigits &&
+    luhnValid(num) &&
+    cardExpiryValid(expiry) &&
+    new RegExp(`^\\d{${cvcLen}}$`).test(cvc) &&
+    /^\d{5}$/.test(zip)
+  );
+}

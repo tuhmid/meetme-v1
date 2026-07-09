@@ -253,10 +253,17 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const uid = await resolveCaller(req);
     if (!uid) return reply.code(401).send({ error: 'auth required' });
     if (!(await deps.repo.getUser(uid))) return reply.code(404).send({ error: 'unknown user' });
-    const v = await deps.rail.validateCard(uid);
-    if (!v.ok) return reply.code(400).send({ error: 'card validation failed', code: 'card_invalid' });
-    await deps.repo.setCardOnFile(uid, v.last4);
-    return { ok: true, last4: v.last4 };
+    // The client collects the card and sends ONLY the last 4 (test mode — a real rail runs a
+    // Stripe SetupIntent and returns a token). Fall back to the rail's mock last4 if none given.
+    const body = (req.body ?? {}) as { last4?: string };
+    let last4 = typeof body.last4 === 'string' && /^\d{4}$/.test(body.last4) ? body.last4 : null;
+    if (!last4) {
+      const v = await deps.rail.validateCard(uid);
+      if (!v.ok) return reply.code(400).send({ error: 'card validation failed', code: 'card_invalid' });
+      last4 = v.last4;
+    }
+    await deps.repo.setCardOnFile(uid, last4);
+    return { ok: true, last4 };
   });
 
   // Mock ID verification — a licensed KYC partner does this for real. Bumps the tier.

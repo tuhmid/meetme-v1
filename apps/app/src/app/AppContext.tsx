@@ -17,6 +17,8 @@ import { supabase, SUPABASE_URL } from '../supabase';
 import { consumeInitialNotificationTap, onNotificationTap, registerForPush, type NotificationData } from '../push';
 import { formatMoney, gentle, phoneValid, stateBanner, toE164 } from './dealLogic';
 import { goDeal, goHome } from './nav';
+import { CardFormModal } from './CardFormModal';
+import { IdVerifyModal } from './IdVerifyModal';
 
 export interface Session { userId: string; name: string; accessToken: string }
 export interface DemoUsers { buyer: { id: string; name: string }; seller: { id: string; name: string } }
@@ -92,17 +94,29 @@ function useAppState() {
     try { await fn(); } catch (e: any) { setErr(String(e.message ?? e)); } finally { setBusy(false); }
   };
 
-  // Seller needs a card on file before their side is sealed — offer to add one and retry.
-  const promptAddCard = (retry: () => Promise<void>, depositCents = 500) => {
-    const deposit = formatMoney(depositCents);
-    Alert.alert(
-      'Add a card to continue',
-      `You're only ever charged if you don't show up — a ${deposit} hold backs your commitment to the meetup and is released when the deal completes. (Test mode: a fake Visa is used.)`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Add card', onPress: () => run(async () => { await api.addPaymentMethod(bearer()); await retry(); }) },
-      ]
-    );
+  // --- card-on-file + ID verification (TEST MODE) — real entry UIs, mocked verification ---
+  // Both modals are rendered app-wide by AppProvider; opening one stores an optional follow-up
+  // (a gated action to retry, or an Account refresh) run once the entry succeeds.
+  const [cardModal, setCardModal] = useState<null | { onDone?: () => Promise<void> | void }>(null);
+  const [idModal, setIdModal] = useState<null | { onDone?: () => Promise<void> | void }>(null);
+  const openCardForm = (onDone?: () => Promise<void> | void) => setCardModal({ onDone });
+  const openIdVerify = (onDone?: () => Promise<void> | void) => setIdModal({ onDone });
+  // Gate prompts: a seller needs a card to seal terms; larger deals need ID verification.
+  const promptAddCard = (retry: () => Promise<void>) => openCardForm(retry);
+  const promptVerifyId = (retry?: () => Promise<void>) => openIdVerify(retry);
+  // The form sends only the last 4 (never the full number); store it, then run the follow-up.
+  const submitCard = (last4: string) =>
+    run(async () => {
+      await api.addPaymentMethod(bearer(), last4);
+      const done = cardModal?.onDone;
+      setCardModal(null);
+      if (done) await done();
+    });
+  // Mock KYC: flip the tier (a real provider verifies the captured ID), then run the follow-up.
+  const verifyIdSubmit = async () => {
+    await api.verifyKyc(bearer());
+    const done = idModal?.onDone;
+    if (done) await done();
   };
 
   // ---- location: prime at onboarding, require it to head out, stream it while en route ----
@@ -286,13 +300,7 @@ function useAppState() {
       try {
         await sendInvite();
       } catch (e: any) {
-        if (e?.code === 'kyc_required') {
-          Alert.alert('ID verification needed', String(e.message ?? 'Verify your ID for larger deals.'), [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Verify ID (demo)', onPress: () => run(async () => { await api.verifyKyc(session!.accessToken); await sendInvite(); }) },
-          ]);
-          return;
-        }
+        if (e?.code === 'kyc_required') { promptVerifyId(sendInvite); return; } // larger deal → verify ID
         if (e?.code === 'card_required') { promptAddCard(sendInvite); return; } // selling → card needed up front
         throw e;
       }
@@ -451,7 +459,7 @@ function useAppState() {
         await doAct();
       } catch (e: any) {
         if (e?.code !== 'card_required') throw e;
-        promptAddCard(doAct, deal?.commitmentCents ?? 500);
+        promptAddCard(doAct);
       }
     });
 
@@ -628,6 +636,10 @@ function useAppState() {
     refresh, pullDeal, act, rate,
     openDispute, submitStatement, resolveDispute,
     theirName, openProfile, reportOrBlock, leaveSafely,
+    // card + ID verification (test mode)
+    openCardForm, openIdVerify, promptVerifyId,
+    cardModalOpen: !!cardModal, closeCardModal: () => setCardModal(null), submitCard,
+    idModalOpen: !!idModal, closeIdModal: () => setIdModal(null), verifyIdSubmit,
   };
 }
 
@@ -637,7 +649,14 @@ const AppContext = createContext<AppValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const value = useAppState();
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider value={value}>
+      {children}
+      {/* card + ID-verify flows are app-wide so any gate (deal / invite / account) can open them */}
+      <CardFormModal visible={value.cardModalOpen} onClose={value.closeCardModal} onSubmit={value.submitCard} busy={value.busy} />
+      <IdVerifyModal visible={value.idModalOpen} onClose={value.closeIdModal} onVerify={value.verifyIdSubmit} />
+    </AppContext.Provider>
+  );
 }
 
 export function useApp(): AppValue {
