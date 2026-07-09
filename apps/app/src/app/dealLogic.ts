@@ -227,7 +227,7 @@ export function describeTransfer(t: { direction: string; status: string }): { la
 }
 
 // shared text-input look
-export const inputStyle = (theme: Theme) => ({ backgroundColor: theme.colors.surface, borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: theme.spacing.md, fontSize: theme.type.size.md, marginBottom: theme.spacing.sm } as const);
+export const inputStyle = (theme: Theme) => ({ backgroundColor: theme.colors.surface, color: theme.colors.text, borderWidth: 1.5, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: theme.spacing.md, fontSize: theme.type.size.md, marginBottom: theme.spacing.sm } as const);
 
 // ---- meetup time helpers (null time = ASAP) ----
 const atHour = (base: number, h: number): number => { const x = new Date(base); x.setHours(h, 0, 0, 0); return x.getTime(); };

@@ -1,11 +1,12 @@
 // Card entry — TEST MODE. A real card form (number / expiry / CVC / zip) with live
 // formatting + Luhn validation, but only the last 4 ever leaves the device. This is the
 // exact seam a real Stripe Elements / SetupIntent swaps into; no money moves here.
+// Uses the app-wide SpringSheet so its open/close matches every other sheet.
 import { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Button } from '../ui';
+import { SpringSheet } from './components';
 import { cardExpiryValid, cardFormValid, cardLast4, detectCardBrand, formatCardExpiry, formatCardNumber, inputStyle, luhnValid } from './dealLogic';
 
 export interface CardFormModalProps {
@@ -38,59 +39,51 @@ export function CardFormModal({ visible, onClose, onSubmit, busy }: CardFormModa
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
-        <SafeAreaView style={{ backgroundColor: theme.colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                <Text style={{ flex: 1, fontSize: 20, fontWeight: '800', color: theme.colors.text }}>Add a card</Text>
-                <Pressable onPress={onClose} hitSlop={10}><Ionicons name="close" size={24} color={theme.colors.textMuted} /></Pressable>
-              </View>
-              <Text style={{ color: theme.colors.textDim, fontSize: 13, marginBottom: 16 }}>
-                A refundable hold backs each meetup — only captured if you don't show. Test mode: no real charge.
-              </Text>
+    <SpringSheet visible={visible} onClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 2, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+          <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.text, marginBottom: 4 }}>Add a card</Text>
+          <Text style={{ color: theme.colors.textDim, fontSize: 13, marginBottom: 16 }}>
+            A refundable hold backs each meetup — only captured if you don't show. Test mode: no real charge.
+          </Text>
 
-              <Text style={labelStyle}>Card number</Text>
-              <View style={{ justifyContent: 'center' }}>
-                <TextInput
-                  value={number}
-                  onChangeText={(t) => setNumber(formatCardNumber(t))}
-                  placeholder="1234 5678 9012 3456"
-                  placeholderTextColor={theme.colors.textMuted}
-                  keyboardType="number-pad"
-                  style={[inputStyle(theme), numErr && { borderColor: theme.colors.danger }]}
-                />
-                {!!number && <Text style={{ position: 'absolute', right: 14, color: theme.colors.textDim, fontWeight: '700', fontSize: 12 }}>{brand}</Text>}
-              </View>
-              {numErr && <Text style={errStyle}>Check the card number.</Text>}
+          <Text style={labelStyle}>Card number</Text>
+          <View style={{ justifyContent: 'center' }}>
+            <TextInput
+              value={number}
+              onChangeText={(t) => setNumber(formatCardNumber(t))}
+              placeholder="1234 5678 9012 3456"
+              placeholderTextColor={theme.colors.textMuted}
+              keyboardType="number-pad"
+              style={[inputStyle(theme), numErr && { borderColor: theme.colors.danger }]}
+            />
+            {!!number && <Text style={{ position: 'absolute', right: 14, color: theme.colors.textDim, fontWeight: '700', fontSize: 12 }}>{brand}</Text>}
+          </View>
+          {numErr && <Text style={errStyle}>Check the card number.</Text>}
 
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={labelStyle}>Expiry</Text>
-                  <TextInput value={expiry} onChangeText={(t) => setExpiry(formatCardExpiry(t))} placeholder="MM/YY" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" maxLength={5} style={[inputStyle(theme), expErr && { borderColor: theme.colors.danger }]} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={labelStyle}>CVC</Text>
-                  <TextInput value={cvc} onChangeText={(t) => setCvc(t.replace(/\D/g, '').slice(0, cvcLen))} placeholder={cvcLen === 4 ? '1234' : '123'} placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" maxLength={cvcLen} secureTextEntry style={inputStyle(theme)} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={labelStyle}>Zip</Text>
-                  <TextInput value={zip} onChangeText={(t) => setZip(t.replace(/\D/g, '').slice(0, 5))} placeholder="10001" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" maxLength={5} style={inputStyle(theme)} />
-                </View>
-              </View>
-              {expErr && <Text style={errStyle}>That expiry date has passed.</Text>}
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={labelStyle}>Expiry</Text>
+              <TextInput value={expiry} onChangeText={(t) => setExpiry(formatCardExpiry(t))} placeholder="MM/YY" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" maxLength={5} style={[inputStyle(theme), expErr && { borderColor: theme.colors.danger }]} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={labelStyle}>CVC</Text>
+              <TextInput value={cvc} onChangeText={(t) => setCvc(t.replace(/\D/g, '').slice(0, cvcLen))} placeholder={cvcLen === 4 ? '1234' : '123'} placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" maxLength={cvcLen} secureTextEntry style={inputStyle(theme)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={labelStyle}>Zip</Text>
+              <TextInput value={zip} onChangeText={(t) => setZip(t.replace(/\D/g, '').slice(0, 5))} placeholder="10001" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" maxLength={5} style={inputStyle(theme)} />
+            </View>
+          </View>
+          {expErr && <Text style={errStyle}>That expiry date has passed.</Text>}
 
-              <Button label="Add card" iconName="lock-closed" disabled={!valid} loading={busy} onPress={submit} style={{ marginTop: 16 }} />
-              <Text style={{ color: theme.colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: 10 }}>
-                Only the last 4 digits are stored. No real payment is set up in test mode.
-              </Text>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </View>
-    </Modal>
+          <Button label="Add card" iconName="lock-closed" disabled={!valid} loading={busy} onPress={submit} style={{ marginTop: 16 }} />
+          <Text style={{ color: theme.colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: 10 }}>
+            Only the last 4 digits are stored. No real payment is set up in test mode.
+          </Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SpringSheet>
   );
 }
 
