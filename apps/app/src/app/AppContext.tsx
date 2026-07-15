@@ -530,11 +530,21 @@ function useAppState() {
         const res = await api.act(bearer(), dealId, { type: 'REVEAL_CODE' });
         if (res.secret) setCode(res.secret.releaseCode);
         await pullDeal(bearer(), dealId);
-      } catch { /* the buyer can retry by reopening */ }
+      } catch { /* auto-reveal failed — the buyer can tap the manual button below */ }
       finally { revealing.current = false; }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deal?.state, dealId, viewAs, code]);
+
+  // Manual fallback if the auto-reveal above ever fails (network blip) — so the buyer is
+  // never stranded at the handoff with a blank QR and no way to recover.
+  const revealCode = () =>
+    run(async () => {
+      if (dealId == null) return;
+      const res = await api.act(bearer(), dealId, { type: 'REVEAL_CODE' });
+      if (res.secret) setCode(res.secret.releaseCode);
+      await pullDeal(bearer(), dealId);
+    });
 
   // ---- disputes ----
   const openDispute = () =>
@@ -633,7 +643,7 @@ function useAppState() {
     loadHome, pollHome, openDeal, loadMessages, sendMessage, attachImage, newDeal, inviteSomeone,
     acceptInvite, declineInvite, deleteDraft, cancelDeal, propose,
     openMeetup, shareFromAddress, chooseMeetup, useCustomSpot, proposeMeetup, confirmMeetup, reschedule,
-    refresh, pullDeal, act, rate,
+    refresh, pullDeal, act, rate, revealCode,
     openDispute, submitStatement, resolveDispute,
     theirName, openProfile, reportOrBlock, leaveSafely,
     // card + ID verification (test mode)

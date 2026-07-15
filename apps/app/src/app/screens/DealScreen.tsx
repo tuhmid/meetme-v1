@@ -60,7 +60,7 @@ export default function DealScreen() {
     showTrust, setShowTrust, profile, profileOpen, setProfileOpen, profileLoading,
     meetupOpen, setMeetupOpen, comingFrom, setComingFrom, customSpot, setCustomSpot, suggestions, meetupMsg,
     myId, myRole, refresh, pullDeal, loadMessages, bearer,
-    act, rate, sendMessage, attachImage, cancelDeal, leaveSafely, openDispute, reportOrBlock, theirName,
+    act, rate, revealCode, sendMessage, attachImage, cancelDeal, leaveSafely, openDispute, reportOrBlock, theirName,
     openProfile, openMeetup, propose, resolveDispute, submitStatement,
     shareFromAddress, chooseMeetup, useCustomSpot, confirmMeetup, reschedule, proposeTime, setProposeTime,
   } = useApp();
@@ -399,6 +399,13 @@ export default function DealScreen() {
                   <Text style={{ fontSize: theme.type.size.xxl, fontWeight: theme.type.weight.bold, letterSpacing: 6, color: theme.colors.primary, textAlign: 'center', marginTop: 4 }}>{code}</Text>
                 </Card>
               </Animated.View>
+            )}
+            {deal.state === 'AT_MEETUP' && role === 'buyer' && !code && (
+              // fallback if the auto-reveal didn't land (network blip) — never leave the buyer stuck
+              <Card style={{ marginTop: 14, alignItems: 'center' }}>
+                <Text style={{ color: theme.colors.textDim, textAlign: 'center', marginBottom: 12 }}>Reveal your one-time release QR for the seller to scan.</Text>
+                <Button label="Reveal release code" iconName="key" loading={busy} onPress={revealCode} />
+              </Card>
             )}
             {deal.state === 'AT_MEETUP' && role === 'seller' && (
               <Animated.View entering={enterSection(8)} style={{ marginTop: 14, gap: 8 }}>
